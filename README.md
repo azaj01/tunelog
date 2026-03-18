@@ -26,27 +26,17 @@ Generated playlists include your top weighted songs, occasional one-time listens
 
 ```
 tunelog/
+├── main.py             # entry point, runs the watcher loop
 ├── watcher.py          # polls Navidrome now-playing, logs to SQLite
 ├── generator.py        # reads DB, scores songs, outputs M3U playlist
 ├── db.py               # SQLite schema and helpers
-├── config.py           # Navidrome URL, credentials, thresholds
-├── data/
+├── config.py           # builds Navidrome API URLs from .env
+├── .env                # your credentials (never commit this)
+├── .env.example        # template — copy this to .env
+├── Data/
 │   └── tunelog.db      # listen history (auto-created)
 └── playlists/          # generated M3U files go here
 ```
-
-## Roadmap
-
-- [x] Project structure
-- [ ] Navidrome watcher (now-playing poller)
-- [ ] SQLite listen logger
-- [ ] Playlist generator with scoring
-- [ ] M3U export
-- [ ] Config file support
-- [ ] Multi-user support (user_id per record)
-- [ ] Time decay for old listens
-- [ ] Genre-filtered random injection
-- [ ] Web UI dashboard
 
 ## Requirements
 
@@ -56,14 +46,40 @@ tunelog/
 
 ## Setup
 
+**1. Clone the repo**
+
+**2. Configure your environment**
 ```bash
-git clone https://github.com/yourusername/tunelog.git
-cd tunelog
-pip install -r requirements.txt
-cp config.example.py config.py
-# edit config.py with your Navidrome URL and credentials
-python watcher.py
+cp .env.example .env
 ```
+
+Edit `.env` with your Navidrome details:
+```env
+NAVIDROME_URL=http://localhost:4533
+NAVIDROME_USER=your_username
+NAVIDROME_PASS=your_password
+POLL_INTERVAL=5
+```
+
+**4. Run the watcher**
+```bash
+python main.py
+```
+
+## Roadmap
+
+- [x] Project structure
+- [x] Navidrome API connection
+- [x] SQLite listen logger
+- [x] Multi-user support (user_id per record)
+- [x] INSERT on new song, UPDATE on same song
+- [x] 10 minute re-listen window
+- [ ] Signal scoring (skip / partial / full / repeat)
+- [ ] Playlist generator
+- [ ] M3U export
+- [ ] Time decay for old listens
+- [ ] Genre-filtered random injection
+- [ ] Web UI dashboard
 
 ## Why tunelog?
 
