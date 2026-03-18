@@ -4,14 +4,25 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "Data", "tunelog.db")
+
+# db for loging song history
+DB_PATH_LOG = os.path.join(os.path.dirname(__file__), "Data", "tunelog.db")
+
+# db for song list
+DB_PATH_LIB = os.path.join(os.path.dirname(__file__), "Data", "songlist.db")
 
 # Database connection
 
-
 def get_db_connection():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    os.makedirs(os.path.dirname(DB_PATH_LOG), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH_LOG)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def get_db_connection_lib():
+    os.makedirs(os.path.dirname(DB_PATH_LIB), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH_LIB)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -45,5 +56,28 @@ def init_db():
     conn.close()
 
 
+def init_db_lib():
+    conn = get_db_connection_lib()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS library (
+            song_id     TEXT PRIMARY KEY,
+            title       TEXT,
+            artist      TEXT,
+            album       TEXT,
+            genre       TEXT,
+            duration    INTEGER,
+            last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    )
+
+    conn.commit()
+    conn.close()
+
+
 if __name__ == "__main__":
     init_db()
+    init_db_lib()

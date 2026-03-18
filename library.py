@@ -1,0 +1,74 @@
+# to fetch and create library database from navidrome
+
+
+import requests
+from config import build_url
+from db import init_db_lib, get_db_connection_lib
+
+
+def url(batch, offset):
+    url = build_url("search3")
+    song_url = url + f"&query=&songCount={batch}&songOffset={offset}"
+    print(song_url)
+    return song_url
+
+
+def fetch_all_song():
+    all_song = []
+    offset = 0
+    batch = 100
+
+    while True:
+        response = requests.get(url(batch , offset))
+        data = response.json()
+
+        songs = data["subsonic-response"].get("searchResult3", {}).get("song", [])
+
+        if not songs:
+            break
+
+        all_song.extend(songs)
+        offset += batch
+        print(f"[SYNC] fetched {len(all_song)} songs so far...")
+        
+
+    return all_song
+
+def sync_library():
+    songs = fetch_all_song()
+
+    conn = get_db_connection_lib()
+    cursor = conn.cursor()
+
+    for song in songs:
+        cursor.execute(
+            """
+            INSERT INTO library (song_id, title, artist, album, genre, duration)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(song_id) DO UPDATE SET
+                title       = excluded.title,
+                artist      = excluded.artist,
+                album       = excluded.album,
+                genre       = excluded.genre,
+                duration    = excluded.duration,
+                last_synced = CURRENT_TIMESTAMP
+        """,
+            (
+                song["id"],
+                song.get("title", ""),
+                song.get("artist", ""),
+                song.get("album", ""),
+                song.get("genre", ""),
+                song.get("duration", 0),
+            ),
+        )
+
+    conn.commit()
+    conn.close()
+
+    print(f"[SYNC] done — {len(songs)} songs synced to library")
+
+
+if __name__ == "__main__":
+    init_db_lib()
+    sync_library()

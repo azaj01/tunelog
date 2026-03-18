@@ -13,16 +13,25 @@
 # TODO:
 
 # implement a better system to signal positive and stuff
-#     -can be done by , when song change detected, update database, by subtracting start and end time of the song to log the played time, 
+#     -can be done by , when song change detected, update database, by subtracting start and end time of the song to log the played time, - done
+
 # implement QUEUE
 # url_queue = navidrome_url("getPlayQueue")
 # print("queue:" ,url_queue)
+# stop from going 200%
 
+# existing 509
+# [UPDATE] adii | Pal Bhar | 104%
+# existing 510
+# [UPDATE] adii_mobile | Soch Na Sake | 238%    done
+
+# implement loging when song changes done
 
 import requests
 import time
 from config import build_url
-from db import get_db_connection, init_db
+from db import get_db_connection, init_db, init_db_lib
+from library import sync_library
 
 
 # store user data
@@ -42,16 +51,32 @@ def Watcher():
 
     entries = url_response["subsonic-response"].get("nowPlaying", {}).get("entry", [])
     # print("\nentires : " , entries)
+    
     if not entries:
         print("nothing is playing")
+        for user_id in list(active.keys()):
+            log_history(active.pop(user_id))
+            print(f"[STOP] {user_id} stopped")
         return
-
+    
     for entry in entries:
         user_id  = entry["username"]
         song_id  = entry["id"]
+        if user_id in active and active[user_id]["song_id"] == song_id:
+            elapsed = time.time() - active[user_id]["start_time"]
+
+            if elapsed >= active[user_id]["duration"]:
+                active.pop(user_id)
+                print(f"[DONE] {user_id} finished: {entry['title']}")
+                continue
 
         if user_id not in active or active[user_id]["song_id"] != song_id:
-            # only set start_time when it's a NEW song
+
+            if user_id in active:
+                print(active[user_id])
+                log_history(active[user_id]) 
+                print(active[user_id])
+
             active[user_id] = {
                 "song_id": song_id,
                 "user_id": user_id,
@@ -63,17 +88,54 @@ def Watcher():
                 "start_time": time.time(), 
             }
             print(f"[NEW] {user_id} started: {entry['title']}")
+
         else:
             # same song still playing → don't touch start_time
             print(f"[SAME] {user_id} still playing: {active[user_id]['title']}")
 
-# logs history in db
+    current_users = {entry["username"] for entry in entries}
+    for user_id in list(active.keys()):
+        if user_id not in current_users:
+            log_history(active.pop(user_id))
+            print(f"[STOP] {user_id} stopped")
 
+
+def signal_system(percent_played, song_id, user_id):
+    if percent_played <= 30:
+        base = "skip"
+    elif percent_played < 80:
+        base = "partial"
+    else:
+        base = "positive"
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT COUNT(*) FROM listens
+        WHERE song_id = ? AND user_id = ?
+        AND timestamp < datetime('now', '-10 minutes')
+    """,
+        (song_id, user_id),
+    )
+
+    prior_listens = cursor.fetchone()[0]
+    conn.close()
+
+    if prior_listens > 0 and base == "positive":
+        base = "repeat"
+
+    return base
+
+
+# logs history in db
 def log_history(song):
     # print(song)
-    played = time.time() - song["start_time"]
-    percent_played = round((played / song["duration"]) * 100)
-    signal = "positve"
+    played = min(time.time() - song["start_time"], song["duration"])
+    percent_played = min(round((played / song["duration"]) * 100), 100)
+    signal = signal_system(percent_played, song["song_id"], song["user_id"])
+    print("percent : " , percent_played)
+    print("signal : " , signal)
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -96,9 +158,9 @@ def log_history(song):
     if existing:
         cursor.execute("""
             UPDATE listens 
-            SET played = ?, percent_played = ?
+            SET played = ?, percent_played = ?, signal = ?
             WHERE id = ?
-        """, (played, percent_played, existing[0]))
+        """, (played, percent_played, signal, existing[0]))
         print(f"[UPDATE] {song['user_id']} | {song['title']} | {percent_played}%")
 
     else:    
@@ -127,12 +189,14 @@ def log_history(song):
     conn.close()
 
 
-#main function
+# main function
 
 if __name__ == "__main__":
     init_db()
+    init_db_lib()
+    sync_library()
+    init_db()
     while True:
         Watcher()
-        for user_id, song in active.items():
-            log_history(song)
+
         time.sleep(5)
