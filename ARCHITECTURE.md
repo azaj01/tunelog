@@ -2,7 +2,28 @@
 
 This document outlines the technical architecture, data flow, and design decisions made during TuneLog development.
 
----
+## TODO
+- Itunes support is broken, My thinking was that i will implement a rating system, if check if the song has metadata, and explicit metadata, If not then fetch it using itunes and add it songlist database, but its not completed yet
+
+- SSE works fine but when using Navidrome client like Tempo it generate more then 1 event when playing music, this makes Watcher() run more then once, No imminnet problem yet, but it can create an overhead
+
+
+## Key changes :-
+- Instead of logging getNowPlaying api every 5 sec, use SSE to automate it
+
+
+## Table of Contents
+
+- [Data Flow](#data-flow)
+- [The Ghost Flush Mechanism](#the-ghost-flush-mechanism)
+- [Signal System](#signal-system)
+- [Genre Normalisation Pipeline](#genre-normalisation-pipeline)
+- [Genre Injection](#genre-injection)
+- [Playlist Slot System](#playlist-slot-system)
+- [Timezone Safety](#timezone-safety)
+- [Multi-User Setup](#multi-user-setup)
+- [Known Limitations](#known-limitations)
+  
 
 ## Data Flow
 ```
@@ -12,6 +33,12 @@ tunelog.db + songlist.db → playlist.py → Navidrome API (playlist push)
 ```
 
 ---
+
+### Library Sync Performance Note
+
+iTunes API enforces rate limits (~20 req/min). TuneLog uses a 1s delay between calls + exponential backoff on 429 errors (5s, 10s, 15s). A full 2383-song library takes approximately **30–40 minutes** on first sync. Subsequent syncs only process songs missing metadata and complete in seconds.
+
+To counter this, I have added A toggle for it in `library.py`
 
 ## The "Ghost Flush" Mechanism
 
@@ -183,12 +210,37 @@ days_since = max((datetime.now() - datetime.fromisoformat(timestamp)).days, 0)
 
 ---
 
-## Multi-user Support
+## Multi-User Setup
 
-- Each user has separate credentials in `config.py`
-- All DB queries filtered by `user_id`
-- Separate playlist pushed per user named `Tunelog - {user_id}`
-- Playlist set to private after creation
+TuneLog supports multiple Navidrome users. Each user gets their own independently generated playlist based on their personal listen history.
+
+### Configuration
+
+TuneLog uses a `.env` file to store credentials. This file is **never committed to Git** — it lives only on your machine.
+
+Create a `.env` file in the root directory:
+```env
+# User 1
+USER1_USERNAME=alice
+USER1_PASSWORD=yourpassword
+
+# User 2
+USER2_USERNAME=bob
+USER2_PASSWORD=yourpassword
+```
+
+> Add as many `USERn_*` blocks as you have users. Each user must have both fields.
+
+### In config.py
+```python
+# ADD MORE LINES IF YOU HAVE MORE USERS
+USER_CREDENTIALS = {
+    os.getenv("USER_ADITI"): os.getenv("PASSWORD_aditi"),
+    os.getenv("USER_adii_mobile"): os.getenv("PASSWORD_adii_mobile"),
+    os.getenv("admin_username"): os.getenv("admin_password"),
+    # Add as many users as you want
+}
+```
 
 ---
 
@@ -198,3 +250,4 @@ days_since = max((datetime.now() - datetime.fromisoformat(timestamp)).days, 0)
 - **Symfonium / third-party sync** — each playlist regeneration creates a new playlist ID in Navidrome. Apps that sync by ID (like Symfonium) require manual reimport each time.
 - **No genre metadata** — songs without embedded genre tags receive `"default"` and score 1 point in the unheard pool, giving them lower priority than tagged songs.
 - **Artist name variants** — `"Arijit Singh"` and `"Arjeet Singh"` are treated as different artists. No fuzzy matching implemented yet.
+- **iTunes metadata sync is slow** — `sync_library()` makes one iTunes API call per song with a 0.5–1s delay to avoid rate limiting. For a 2000+ song library, a full sync takes 20–40 minutes. Re-syncing after adding new songs is fast since only songs with `explicit IS NULL` are fetched, but initial sync is a one-time long operation.

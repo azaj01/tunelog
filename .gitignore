@@ -46,4 +46,7 @@ pip-wheel-metadata/
 *.swo
 .DS_Store
 Thumbs.db
+_pycache_
+__pycache__
+*.db
 
