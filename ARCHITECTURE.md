@@ -2,7 +2,18 @@
 
 This document outlines the technical architecture, data flow, and design decisions made during TuneLog development.
 
----
+## Table of Contents
+
+- [Data Flow](#data-flow)
+- [The Ghost Flush Mechanism](#the-ghost-flush-mechanism)
+- [Signal System](#signal-system)
+- [Genre Normalisation Pipeline](#genre-normalisation-pipeline)
+- [Genre Injection](#genre-injection)
+- [Playlist Slot System](#playlist-slot-system)
+- [Timezone Safety](#timezone-safety)
+- [Multi-User Setup](#multi-user-setup)
+- [Known Limitations](#known-limitations)
+  
 
 ## Data Flow
 ```
@@ -183,12 +194,37 @@ days_since = max((datetime.now() - datetime.fromisoformat(timestamp)).days, 0)
 
 ---
 
-## Multi-user Support
+## Multi-User Setup
 
-- Each user has separate credentials in `config.py`
-- All DB queries filtered by `user_id`
-- Separate playlist pushed per user named `Tunelog - {user_id}`
-- Playlist set to private after creation
+TuneLog supports multiple Navidrome users. Each user gets their own independently generated playlist based on their personal listen history.
+
+### Configuration
+
+TuneLog uses a `.env` file to store credentials. This file is **never committed to Git** — it lives only on your machine.
+
+Create a `.env` file in the root directory:
+```env
+# User 1
+USER1_USERNAME=alice
+USER1_PASSWORD=yourpassword
+
+# User 2
+USER2_USERNAME=bob
+USER2_PASSWORD=yourpassword
+```
+
+> Add as many `USERn_*` blocks as you have users. Each user must have both fields.
+
+### In config.py
+```python
+# ADD MORE LINES IF YOU HAVE MORE USERS
+USER_CREDENTIALS = {
+    os.getenv("USER_ADITI"): os.getenv("PASSWORD_aditi"),
+    os.getenv("USER_adii_mobile"): os.getenv("PASSWORD_adii_mobile"),
+    os.getenv("admin_username"): os.getenv("admin_password"),
+    # Add as many users as you want
+}
+```
 
 ---
 
