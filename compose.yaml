@@ -1,0 +1,9 @@
+services:
+  tunelog:
+    build:
+      context: .
+    container_name: tunelog
+    volumes:
+      - ./data:/app/Data
+    env_file:
+      - .env
