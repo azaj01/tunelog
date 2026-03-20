@@ -14,11 +14,12 @@ from urllib.parse import urlencode
 import requests
 import re
 from queue import Queue
+from pathlib import Path
 
 
 event_queue = Queue()
 
-load_dotenv()
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 Navidrome_url = os.getenv("base_url")
 Navidrome_admin = os.getenv("admin_username")
