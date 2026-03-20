@@ -1,3 +1,11 @@
+// To show admin the skip rate of songs
+// by percentage 
+// skipped in 1st 30sec = 10%
+// and so on
+
+
+
+
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
 import { useState } from "react";
@@ -5,7 +13,7 @@ import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { MoreDotIcon } from "../../icons";
 
-export default function MonthlyTarget() {
+export default function MostSkippedPercentage() {
   const series = [75.55];
   const options: ApexOptions = {
     colors: ["#465FFF"],
@@ -69,7 +77,7 @@ export default function MonthlyTarget() {
         <div className="flex justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-              Monthly Target
+              Most skipped song this Monthly
             </h3>
             <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
               Target you’ve set for each month

@@ -251,6 +251,41 @@ USER_CREDENTIALS = {
     # Add as many users as you want
 }
 ```
+## Web UI & API Layer
+
+TuneLog includes a FastAPI backend that exposes SQLite data to the React dashboard.
+
+### Stack
+- **FastAPI** — Python REST API server
+- **React + TypeScript + Vite** — frontend dashboard (TailAdmin base)
+- **SQLite → FastAPI → React** — all data flows server-side, frontend only receives pre-computed results
+
+### Running the API
+```bash
+cd backend
+uvicorn api:app --reload --port 8000
+```
+
+### Endpoints
+
+#### `GET /api/ping`
+Health check. Returns `{"status": "OK"}`.
+
+#### `GET /api/stats`
+Main dashboard data endpoint. Queries both `tunelog.db` and `songlist.db` and returns:
+
+| Field | Source | Description |
+|---|---|---|
+| `total_songs` | `songlist.db` | Total songs in library |
+| `total_listens` | `tunelog.db` | Total listen events logged |
+| `signals` | `tunelog.db` | Count per signal type (skip/partial/positive/repeat) |
+| `most_played_artists` | `tunelog.db` | Top 10 artists by play count |
+| `most_played_songs` | `tunelog.db` | Top 10 songs by play count with title, artist, count |
+
+### Design Decisions
+- All aggregation happens server-side in SQL — frontend receives only pre-computed results, never raw rows
+- Single `/api/stats` endpoint covers the entire dashboard — one fetch on page load, no per-component API calls
+- CORS is restricted to `localhost:5173` (Vite dev server) — update this for production deployment
 
 ---
 

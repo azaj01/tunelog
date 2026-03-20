@@ -1,27 +1,45 @@
-import EcommerceMetrics from "../../components/ecommerce/EcommerceMetrics";
-import MonthlySalesChart from "../../components/ecommerce/MonthlySalesChart";
+import LibraryMetrics from "../../components/ecommerce/LibraryMetrics";
+import MonthlyPlayed from "../../components/ecommerce/MonthlyPlayed";
 import StatisticsChart from "../../components/ecommerce/StatisticsChart";
-import MonthlyTarget from "../../components/ecommerce/MonthlyTarget";
-import RecentOrders from "../../components/ecommerce/RecentOrders";
-import DemographicCard from "../../components/ecommerce/DemographicCard";
+import MostSkippedPercentage from "../../components/ecommerce/MostSkippedPercentage";
+import MostPlaysbyUser from "../../components/ecommerce/MostPlaysbyUser";
+import MostHeardArtist from "../../components/ecommerce/MostHeardArtist";
 import PageMeta from "../../components/common/PageMeta";
+import { useState, useEffect } from "react";
+
+import { fetchStats , Stats } from "../../API/API";
 
 export default function Home() {
+  
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  
+  
+  
+  // API CALLS
+
+  useEffect(() => {
+    console.log("Fetching data (home)")
+    fetchStats().then((data) => setStats(data));
+    console.log(stats)
+  
+  }, []);
+
   return (
     <>
       <PageMeta
-        title=""
+        title="Dashboard - Tunelog"
         description="This is React.js Ecommerce Dashboard page for TailAdmin - React.js Tailwind CSS Admin Dashboard Template"
       />
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <div className="col-span-12 space-y-6 xl:col-span-7">
-          <EcommerceMetrics />
+          <LibraryMetrics stats={stats}/>
 
-          <MonthlySalesChart />
+          <MonthlyPlayed />
         </div>
 
         <div className="col-span-12 xl:col-span-5">
-          <MonthlyTarget />
+          <MostSkippedPercentage />
         </div>
 
         <div className="col-span-12">
@@ -29,11 +47,11 @@ export default function Home() {
         </div>
 
         <div className="col-span-12 xl:col-span-5">
-          <DemographicCard />
+          <MostHeardArtist />
         </div>
 
         <div className="col-span-12 xl:col-span-7">
-          <RecentOrders />
+          <MostPlaysbyUser />
         </div>
       </div>
     </>

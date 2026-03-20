@@ -1,10 +1,17 @@
+// To show the most heard Artist
+
+// TODO : i dont need CountryMap remove them 
+
+
+
+
 import { useState } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { MoreDotIcon } from "../../icons";
 import CountryMap from "./CountryMap";
 
-export default function DemographicCard() {
+export default function MostHeardArtist() {
   const [isOpen, setIsOpen] = useState(false);
 
   function toggleDropdown() {
@@ -19,7 +26,7 @@ export default function DemographicCard() {
       <div className="flex justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-            Customers Demographic
+            Most Heard Artists
           </h3>
           <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
             Number of customer based on country

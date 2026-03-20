@@ -1,3 +1,7 @@
+// StatisticsChart for repeate vs skip vs partial vs complete graph 
+// over weekly / monthly / 2 months as after 60 days wild card song will take enter
+
+
 import { useEffect, useRef } from "react";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
@@ -151,7 +155,7 @@ export default function StatisticsChart() {
             Statistics
           </h3>
           <p className="mt-1 text-gray-500 text-theme-sm dark:text-gray-400">
-            Target you've set for each month
+            for song that are skipped , compleded repeated, partial skip
           </p>
         </div>
         <div className="flex items-center gap-3 sm:justify-end">
