@@ -3,9 +3,19 @@
 This document outlines the technical architecture, data flow, and design decisions made during TuneLog development.
 
 ## TODO
+
+- Added docker support for frontend
+
+
 - Itunes support is broken, My thinking was that i will implement a rating system, if check if the song has metadata, and explicit metadata, If not then fetch it using itunes and add it songlist database, but its not completed yet
 
 - SSE works fine but when using Navidrome client like Tempo it generate more then 1 event when playing music, this makes Watcher() run more then once, No imminnet problem yet, but it can create an overhead
+
+
+
+## CURRENTLY : 
+- Currently building web ui dash board
+
 
 
 ## Key changes :-

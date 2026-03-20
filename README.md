@@ -10,6 +10,7 @@ This project was built by me, with AI assistance in specific areas:
 - **Documentation** — README formatting and wording
 
 The core logic — signal system, scoring formula, genre injection, playlist slot system, and architecture decisions — was designed and written by me.
+
 ## How It Works
 TuneLog watches your Navidrome listening activity in the background. It tracks whether you skip, finish, or replay songs, and uses that behavior to build personalised playlists automatically — one per user.
 
@@ -36,16 +37,22 @@ Generated playlists include:
 ## Project Structure
 ```
 TuneLog/
-├── main.py          # entry point — watcher loop + playlist trigger
-├── playlist.py      # scores songs, builds + pushes playlist to Navidrome
-├── library.py       # syncs full song library from Navidrome into SQLite
-├── db.py            # SQLite schema and connection helpers
-├── config.py        # builds Navidrome API URLs + per-user credentials
-├── .env             # your credentials (never commit this)
-├── .env.example     # template — copy this to .env
-└── Data/
-    ├── tunelog.db   # listen history (auto-created)
-    └── songlist.db  # full library cache (auto-created)
+├── backend/
+│   ├── main.py          # entry point — watcher loop + playlist trigger
+│   ├── playlist.py      # scores songs, builds + pushes playlist to Navidrome
+│   ├── library.py       # syncs full song library from Navidrome into SQLite
+│   ├── db.py            # SQLite schema and connection helpers
+│   ├── config.py        # builds Navidrome API URLs + per-user credentials
+│   └── Data/
+│       ├── tunelog.db   # listen history (auto-created)
+│       └── songlist.db  # full library cache (auto-created)
+├── frontend/            # web dashboard (TailAdmin + React + Vite)
+│   ├── src/
+│   └── ...
+├── .env                 # your credentials (never commit this)
+├── .env.example         # template — copy this to .env
+├── compose.yaml         # docker compose for backend + frontend
+└── Dockerfile
 ```
 
 ## Requirements
@@ -54,7 +61,18 @@ TuneLog/
 - Docker (optional, recommended for Navidrome)
 ## Setup
 
+### For Web UI
+```bash
+#Go to frontend folder
+cd frontend
+#Install dependencies
+npm install
+#start server
+npm build dev
+```
+- For now, i havent integrated frontend to docker
 ### Docker (recommended)
+
 **1. Clone the repo**
 
 **2. Configure your environment**
@@ -77,6 +95,8 @@ cp .env.example .env
 ```
 **3. Install dependencies**
 ```bash
+cd backend
+
 pip install -r requirements.txt
 ```
 **4. Run**
@@ -163,3 +183,8 @@ Most self-hosted music servers either have no recommendations or rely on externa
 
 ---
 > Built for Navidrome. Inspired by how early Last.fm and Spotify worked before they had millions of users.
+
+
+
+## Credits
+- UI built on [TailAdmin React](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard) (MIT)
