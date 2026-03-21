@@ -46,12 +46,14 @@ TuneLog/
 │   ├── db.py            # SQLite schema and connection helpers
 │   ├── config.py        # builds Navidrome API URLs + per-user credentials
 │   ├── api.py           # FastAPI backend — exposes SQLite data to dashboard
+|   ├── Dockerfile
 │   └── Data/
 │       ├── tunelog.db   # listen history (auto-created)
 │       └── songlist.db  # full library cache (auto-created)
 ├── frontend/            # web dashboard (TailAdmin + React + Vite)
 │   ├── src/
 │   └── ...
+|   ├── Dockerfile
 ├── .env                 # your credentials (never commit this)
 ├── .env.example         # template — copy this to .env
 ├── compose.yaml         # docker compose for backend + frontend
@@ -88,8 +90,6 @@ Dashboard will be available at `http://localhost:5173`. Requires the API server 
 ---
 
 ### Docker (recommended for backend)
-
-> Note: Frontend is not yet integrated into Docker. Run it manually as above.
 
 **1. Clone the repo**
 
