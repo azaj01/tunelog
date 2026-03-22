@@ -1,105 +1,3 @@
-// import PageBreadcrumb from "../components/common/PageBreadCrumb";
-// import UserMetaCard from "../components/UserProfile/UserMetaCard";
-// import PageMeta from "../components/common/PageMeta";
-// import { useState, useEffect } from "react";
-// import { fetchGetUsers, User } from "../API/API";
-// import Button from "../components/ui/button/Button";
-// import { Modal } from "../components/ui/modal";
-// import { useModal } from "../hooks/useModal";
-// import Input from "../components/form/input/InputField";
-// import Label from "../components/form/Label";
-// import Switch from "../components/form/switch/Switch";
-
-// // import Button from "../ui/button/Button";
-
-// export default function UserProfiles() {
-//   const [users, setUsers] = useState<User[]>([]);
-//   const { isOpen, openModal, closeModal } = useModal();
-//   const [isAdmin, setIsAdmin] = useState(false);
-
-//     const [name, setName] = useState("Name");
-//     const [username, setUsername] = useState("Username");
-//     const [password, setPassword] = useState("password");
-//     const [toggleisAdmin, setToggleIsAdmin] = useState(false);
-
-//   useEffect(() => {
-//     fetchGetUsers({ admin: "adii", adminPD: "adutya11@" }).then((data) => {
-//       if (data.status === "ok" && data.users) {
-//         setUsers(data.users);
-//       }
-//     });
-//   }, []);
-
-//   return (
-//     <>
-//       <PageMeta
-//         title="Users | TuneLog"
-//         description="Users dashboard, helps maintain users, Add, Delete users"
-//       />
-//       <PageBreadcrumb pageTitle="Users" />
-//       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
-//         <Button variant="outline" className="mx-10" onClick={openModal}>
-//           Add user
-//         </Button>
-//         <Button variant="outline" className="mr-10 ">
-//           Maintain user
-//         </Button>
-
-//         <hr className="mt-5" />
-
-//         <div className="space-y-6 mt-5">
-//           {users.map((user) => (
-//             <UserMetaCard key={user.username} user={user} />
-//           ))}
-//         </div>
-//       </div>
-
-//       <Modal isOpen={isOpen} onClose={closeModal} className="max-w-[700px] m-4">
-//         <div className="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-11">
-//           <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
-//             <div className="col-span-2 lg:col-span-1">
-//               <Label>Name</Label>
-//               <Input
-//                 type="text"
-//                 value={name}
-//                 onChange={(e) => setName(e.target.value)}
-//               />
-//             </div>
-
-//             <div className="col-span-2 lg:col-span-1">
-//               <Label>Username</Label>
-//               <Input
-//                 type="text"
-//                 value={username}
-//                 onChange={(e) => setUsername(e.target.value)}
-//               />
-//             </div>
-
-//             <div className="col-span-2">
-//               <Label>Password</Label>
-//               <Input
-//                 type="password"
-//                 value={password}
-//                 onChange={(e) => setPassword(e.target.value)}
-//               />
-//             </div>
-//           </div>
-//           <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
-//             <Switch
-//               label="Is Admin"
-//               defaultChecked={isAdmin}
-//               onChange={(checked) => setToggleIsAdmin(checked)}
-//             />
-//             <Button size="sm" variant="outline" onClick={closeModal}>
-//               Close
-//             </Button>
-//             <Button size="sm">Create User</Button>
-//           </div>
-//         </div>
-//       </Modal>
-//     </>
-//   );
-// }
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import UserMetaCard from "../components/UserProfile/UserMetaCard";
 import PageMeta from "../components/common/PageMeta";
@@ -123,33 +21,47 @@ export default function UserProfiles() {
   const [toggleisAdmin, setToggleIsAdmin] = useState(false);
   const [createError, setCreateError] = useState("");
 
+  console.log("in userprofile")
+  const getAdminCredentials = () => {
+   const storage = localStorage.getItem("tunelog_user")
+     ? localStorage
+     : sessionStorage;
+     console.log("in storage");
+    return {
+      admin: storage.getItem("tunelog_user") ?? "",
+      adminPD: storage.getItem("tunelog_password") ?? "",
+    };
+  };
+
   const loadUsers = () => {
+    console.log("Load users");
     setLoading(true);
-    fetchGetUsers({ admin: "adii", adminPD: "adutya11@" }).then((data) => {
+    const { admin, adminPD } = getAdminCredentials();
+    fetchGetUsers({ admin, adminPD }).then((data) => {
+      console.log("in userprofile fetch");
       if (data.status === "ok" && data.users) {
+        console.log(data.users)
         setUsers(data.users);
       }
       setLoading(false);
     });
   };
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
   const handleCreateUser = () => {
     if (!name || !username || !password) {
       setCreateError("All fields are required");
       return;
     }
+     
 
+    const { admin, adminPD } = getAdminCredentials();
     fetchCreateUser({
       name,
       username,
       password,
       isAdmin: toggleisAdmin,
-      admin: "adii",
-      adminPD: "adutya11@",
+      admin,
+      adminPD,
       email: "",
     }).then((data) => {
       if (data.status === "success") {
@@ -159,12 +71,16 @@ export default function UserProfiles() {
         setPassword("");
         setToggleIsAdmin(false);
         closeModal();
-        loadUsers(); // refresh list after creating
+        loadUsers();
       } else {
         setCreateError(data.reason ?? "Failed to create user");
       }
     });
   };
+   useEffect(() => {
+     console.log("in use effect");
+     loadUsers();
+   }, []);
 
   return (
     <>

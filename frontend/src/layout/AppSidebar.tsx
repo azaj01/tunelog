@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
     path: "/profile",
   },
   {
-    name: "Add User",
+    name: "Library Sync",
     icon: <ListIcon />,
      path: "/form-elements",
   },
