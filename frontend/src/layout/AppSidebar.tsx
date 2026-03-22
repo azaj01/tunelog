@@ -39,7 +39,7 @@ const navItems: NavItem[] = [
   {
     name: "Library Sync",
     icon: <ListIcon />,
-     path: "/form-elements",
+     path: "/librarySync",
   },
   // {
   //   name: "Tables",

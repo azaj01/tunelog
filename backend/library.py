@@ -18,7 +18,61 @@ from config import build_url , _extract , itunesApi
 from db import init_db_lib, get_db_connection_lib
 from time import sleep
 
-toggle_itune = False
+# toggle_itune = False
+# isSyncing = False
+# startSyncSong = False
+# progress = 0
+# auto_sync = 2
+
+
+# def toggleItune():
+#     if toggle_itune:
+#         toggle_itune = False
+#     else:
+#         toggle_itune = True
+#     return toggle_itune
+
+
+# def toggleIsSync():
+#     if isSyncing:
+#         isSyncing = False
+#     else:
+#         isSyncing = True
+#     return isSyncing
+
+
+_auto_sync = 2
+_toggle_itune = False
+_startSyncSong = False
+_isSyncing = False
+_progress = 0
+
+
+def setSyncSettings(auto_sync=2, itunes=False):
+    global _auto_sync, _toggle_itune
+    _auto_sync = auto_sync
+    _toggle_itune = itunes
+
+
+def getSyncSettings():
+    return {
+        "auto_sync": _auto_sync,
+        "use_itunes": _toggle_itune,
+    }
+
+
+def triggerSync(use_itunes=False):
+    global _startSyncSong, _toggle_itune
+    _toggle_itune = use_itunes
+    _startSyncSong = True
+
+
+def getSyncStatus():
+    return {
+        "is_syncing": _isSyncing,
+        "progress": _progress,
+        "start_sync": _startSyncSong,
+    }
 
 
 def _response_preview(response, limit=240):
@@ -120,57 +174,148 @@ def fetch_all_song():
 
 
 def sync_library():
+    global _isSyncing, _progress, _startSyncSong
+
+    _isSyncing = True
+    _startSyncSong = False
+    _progress = 0
+
     songs = fetch_all_song()
+    total = len(songs)
 
     conn = get_db_connection_lib()
     cursor = conn.cursor()
-    progress = 0
-    for song in songs:
-        print("toggle Itunes : " , toggle_itune)
-        if toggle_itune:
-            print("[ITUNES]")
 
-            iTunes = itunesApi(song["title"], song["artist"]) or {}
-            print(iTunes)
-            sleep(0.5)
+    inserted = 0
+    updated = 0
+    skipped = 0
+
+    for i, song in enumerate(songs):
+        song_id = song["id"]
+        song_title = song.get("title", "")
+        song_artist = song.get("artist", "")
+
+        existing = cursor.execute(
+            "SELECT explicit, genre FROM library WHERE song_id = ?", (song_id,)
+        ).fetchone()
+
+        if existing:
+            explicit_val = existing[0]
+            genre_val = existing[1]
+
+            # explicit filled — skip entirely
+            if explicit_val and explicit_val != "":
+                skipped += 1
+                _progress = round((i + 1) / total * 100, 2)
+                print(
+                    f"[SKIP] {song_title} | explicit={explicit_val} genre={genre_val}"
+                )
+                continue
+
+            # explicit is NULL
+            if _toggle_itune:
+                print(f"[ITUNES CALL] {song_title} | {song_artist}")
+                raw_itunes = itunesApi(song_title, song_artist)
+                iTunes = raw_itunes or {}
+                print(f"[ITUNES RAW] {song_title} → {raw_itunes}")
+
+                if not iTunes:
+                    print(f"[ITUNES MISS] {song_title} — setting notInItunes")
+                    cursor.execute(
+                        """UPDATE library SET
+                            explicit = 'notInItunes',
+                            genre = COALESCE(NULLIF(genre, 'default'), 'default'),
+                            last_synced = CURRENT_TIMESTAMP
+                        WHERE song_id = ?""",
+                        (song_id,),
+                    )
+                else:
+                    print("in else statement")
+                    new_explicit = iTunes.get("explicit", "notInItunes")
+                    new_genre = normalise_genre(
+                        iTunes.get("genre") or song.get("genre")
+                    )
+                    print(
+                        f"[ITUNES HIT] {song_title} | explicit={new_explicit} genre={new_genre}"
+                    )
+                    print("updating database")
+                    cursor.execute(
+                        """UPDATE library SET
+                            explicit = ?,
+                            genre = ?,
+                            last_synced = CURRENT_TIMESTAMP
+                        WHERE song_id = ?""",
+                        (new_explicit, new_genre, song_id),
+                    )
+
+                    result = cursor.execute("SELECT explicit FROM library WHERE song_id = ?", (song_id,)).fetchone()
+                    print(f"[VERIFY] {song_title} explicit in DB = {result[0] if result else 'NOT FOUND'}")
+                updated += 1
+            else:
+                print(
+                    f"[SKIP NO ITUNES] {song_title} | explicit is NULL but iTunes disabled"
+                )
+                skipped += 1
 
         else:
-            iTunes = {}
-        cursor.execute(
-            """
-            INSERT INTO library (song_id, title, artist, album, genre, duration , explicit)
-            VALUES (?, ?, ?, ?, ?, ? , ? )
-            ON CONFLICT(song_id) DO UPDATE SET
-                title       = excluded.title,
-                artist      = excluded.artist,
-                album       = excluded.album,
-                genre       = excluded.genre,
-                duration    = excluded.duration,
-                last_synced = CURRENT_TIMESTAMP,
-                explicit    = excluded.explicit
-        """,
-            (
-                song["id"],
-                song["title"],
-                iTunes.get("artist") or song.get("artist", ""),
-                iTunes.get("album") or song.get("album", ""),
-                normalise_genre(iTunes.get("genre") or song.get("genre")),
-                (
-                    (iTunes.get("duration") // 1000)
-                    if iTunes.get("duration")
-                    else song.get("duration", 0)
-                ),
-                iTunes.get("explicit", "notExplicit"),
-            ),
+            if _toggle_itune:
+                print(f"[ITUNES CALL NEW] {song_title} | {song_artist}")
+                raw_itunes = itunesApi(song_title, song_artist)
+                iTunes = raw_itunes or {}
+                print(f"[ITUNES RAW] {song_title} → {raw_itunes}")
+
+                if not iTunes:
+                    explicit = "notInItunes"
+                    genre = normalise_genre(song.get("genre"))
+                    artist = song.get("artist", "")
+                    album = song.get("album", "")
+                    duration = song.get("duration", 0)
+                    print(f"[ITUNES MISS NEW] {song_title} | genre={genre}")
+                else:
+                    explicit = iTunes.get("explicit")
+                    genre = normalise_genre(iTunes.get("genre") or song.get("genre"))
+                    artist = iTunes.get("artist") or song.get("artist", "")
+                    album = iTunes.get("album") or song.get("album", "")
+                    duration = (
+                        (iTunes.get("duration") // 1000)
+                        if iTunes.get("duration")
+                        else song.get("duration", 0)
+                    )
+                    print(
+                        f"[ITUNES HIT NEW] {song_title} | explicit={explicit} genre={genre}"
+                    )
+            else:
+                explicit = None
+                genre = normalise_genre(song.get("genre"))
+                artist = song.get("artist", "")
+                album = song.get("album", "")
+                duration = song.get("duration", 0)
+                print(f"[INSERT FAST] {song_title} | genre={genre}")
+
+            cursor.execute(
+                """
+                INSERT INTO library (song_id, title, artist, album, genre, duration, explicit)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (song_id, song_title, artist, album, genre, duration, explicit),
+            )
+            inserted += 1
+
+        _progress = round((i + 1) / total * 100, 2)
+        print(
+            f"[SYNC] {_progress}% | inserted={inserted} updated={updated} skipped={skipped}"
         )
-        progress += 1
-        print("Progress : " , progress/len(songs) * 100 , "%")
-        print("Remaing : ", len(songs) - progress)
+
+        # commit every 5 songs — don't wait until end
+        if (i + 1) % 5 == 0:
+            conn.commit()
+            print(f"[SYNC] Committed at {i + 1} songs")
 
     conn.commit()
     conn.close()
 
-    print(f"[SYNC] done — {len(songs)} songs synced to library")
+    _isSyncing = False
+    print(f"[SYNC] done — inserted={inserted} updated={updated} skipped={skipped}")
 
 
 if __name__ == "__main__":

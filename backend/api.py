@@ -10,6 +10,8 @@ from config import Navidrome_url
 
 from db import get_db_connection_lib , get_db_connection, get_db_connection_usr
 from db import init_db, init_db_lib, init_db_usr
+# from library import isSyncing, progress, auto_sync, toggle_itune , startSyncSong
+import library
 
 
 from fastapi import FastAPI
@@ -141,36 +143,32 @@ def getJWT(admin_username, admin_password):
 
 
 @app.post("/auth/login")
-def login(data : LoginData):
+def login(data: LoginData):
     admin = data.username
     password = data.password
     res = getJWT(admin, password)
-    conn = get_db_connection_usr().cursor()
+    conn = get_db_connection_usr()  
+    cursor = conn.cursor() 
 
-    if res :
-        existing = conn.execute(
+    if res:
+        existing = cursor.execute(
             "SELECT * FROM user WHERE username = ?", (admin,)
         ).fetchone()
 
-        if existing :
+        if existing:
             print("username already in database")
-        else : 
-            conn.execute(
+        else:
+            cursor.execute(
                 "INSERT INTO user (username, password, isAdmin) VALUES (?, ?, ?)",
-                (admin, password, True)
+                (admin, password, True),
             )
             conn.commit()
 
-        return {
-            "status" : "success",
-            "JWT" : res
-        }
+        conn.close()  
+        return {"status": "success", "JWT": res}
 
-    else:
-        return{
-            "status" : "failed",
-            "reason" : "Invalid username or password"
-        }
+    conn.close()  
+    return {"status": "failed", "reason": "Invalid username or password"}
 
 
 @app.post("/admin/create-user")
@@ -260,7 +258,6 @@ def getUsers(data: AdminAuth):
 
     return {"status": "ok", "users": [dict(row) for row in users]}
 
-
 # http://your-server/rest/ping.view?u=joe&t=26719a1196d2a940705a59634eb18eab&s=c19b2d&v=1.12.0&c=myapp
 
 
@@ -274,6 +271,52 @@ def getUsers(data: AdminAuth):
 # }
 
 # print(createUser(data))
+
+
+@app.get("/api/sync/status")
+def syncStatus():
+    conn = get_db_connection_lib()
+    cursor = conn.cursor()
+
+    total_songs = cursor.execute("SELECT COUNT(*) FROM library").fetchone()[0]
+
+    explicit_songs = cursor.execute(
+        "SELECT COUNT(*) FROM library WHERE explicit = 'explicitContent'"
+    ).fetchone()[0]
+
+    last_sync = cursor.execute(
+        "SELECT last_synced FROM library ORDER BY last_synced DESC LIMIT 1"
+    ).fetchone()
+
+    songs_needing_itunes = cursor.execute(
+        "SELECT COUNT(*) FROM library WHERE explicit IS NULL"
+    ).fetchone()[0]
+
+    conn.close()
+
+    return {
+        "is_syncing": library._isSyncing,
+        "progress": library._progress,
+        "start_sync": library._startSyncSong,
+        "auto_sync": library._auto_sync,
+        "use_itunes": library._toggle_itune,
+        "total_songs": total_songs,
+        "explicit_songs": explicit_songs,
+        "last_sync": last_sync[0] if last_sync else None,
+        "songs_needing_itunes": songs_needing_itunes,
+    }
+
+
+@app.get("/api/sync/start")
+def startSync(use_itunes: bool = False):
+    library.triggerSync(use_itunes)
+    return {"status": "started"}
+
+
+@app.get("/api/sync/setting")
+def syncSetting(auto_sync_hour: int = 2, use_itunes: bool = False):
+    library.setSyncSettings(auto_sync_hour, use_itunes)
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

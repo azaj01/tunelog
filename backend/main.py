@@ -43,10 +43,11 @@
 import requests
 import threading
 import time
+from datetime import datetime
 # from queue import Queue
 from config import build_url , event_queue
-from db import get_db_connection, init_db, init_db_lib
-from library import sync_library
+from db import get_db_connection, init_db, init_db_lib, init_db_usr
+import library
 from playlist import main as generate_playlist
 from library import normalise_genre
 from watcher import start_sse
@@ -242,9 +243,11 @@ if __name__ == "__main__":
     # Database
     init_db()
     init_db_lib()
+    init_db_usr()
 
-    # sync library
-    sync_library()
+
+
+    library.sync_library()
 
     # generate playlist
     print("[TuneLog] Generating playlist...")
@@ -264,11 +267,43 @@ if __name__ == "__main__":
     watcherThread.start()
 
     n = 0
+    last_auto_sync_day = None  # track last day auto sync ran
+
     while True:
-        event = event_queue.get()
-        print("in while loop : ", event)
-        if event == "nowPlaying":
-            n += 1
-            print("Its fucking working")
-            print(n)
-            Watcher()
+        # --- SYNC NOW check ---
+        if library._startSyncSong and not library._isSyncing:
+            print("[TuneLog] Manual sync triggered from UI...")
+            syncThread = threading.Thread(target=library.sync_library, daemon=True)
+            syncThread.start()
+
+        # --- AUTO SYNC check ---
+        now = datetime.now()
+        current_hour = now.hour
+        current_day = now.date()
+        settings = library.getSyncSettings()
+        auto_sync_hour = settings["auto_sync"]
+
+        if (
+            current_hour == auto_sync_hour  
+            and current_day != last_auto_sync_day  
+            and not library._isSyncing  
+        ):
+            print(f"[TuneLog] Auto sync triggered at {now.strftime('%H:%M')}...")
+            last_auto_sync_day = current_day
+            syncThread = threading.Thread(target=library.sync_library, daemon=True)
+            syncThread.start()
+
+        # --- WATCHER event ---
+        try:
+            event = event_queue.get(
+                timeout=2
+            )  # wait 30s max, then loop back to check sync
+            print("in while loop : ", event)
+            if event == "nowPlaying":
+                n += 1
+                print("Its fucking working")
+                print(n)
+                Watcher()
+        except Exception as e:
+            if "Empty" not in str(type(e).__name__):
+                print(f"[ERROR] main loop: {e}")

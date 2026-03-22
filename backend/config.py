@@ -19,6 +19,8 @@ import re
 from queue import Queue
 from pathlib import Path
 from db import get_db_connection_usr
+from time import sleep
+
 
 event_queue = Queue()
 
@@ -107,41 +109,54 @@ def login():
 
 
 # Itunes api call
-import time
 
 
-def itunesApi(title, artist):
+def itunesApi(title, artist, retries=3):
     title = re.sub(r"\(.*?\)", "", title).strip()
     term = f"{title} {artist}".replace(" ", "+")
     url = f"https://itunes.apple.com/search?term={term}&entity=song&limit=5"
 
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # catches 4xx/5xx errors
-    except requests.exceptions.Timeout:
-        print(f"[ITUNES] Timeout — {title}")
-        return None
-    except requests.exceptions.HTTPError as e:
-        print(f"[ITUNES] HTTP error {e} — {title}")
-        return None
-    except requests.exceptions.ConnectionError:
-        print(f"[ITUNES] No connection — {title}")
-        return None
+    for attempt in range(retries):
+        try:
+            sleep(1.5)  # rate limit buffer before every request
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
 
-    results = response.json().get("results", [])
-    if not results:
-        print(f"[ITUNES] No results — {title} | {artist}")
-        return None
+        except requests.exceptions.Timeout:
+            print(f"[ITUNES] Timeout — {title}")
+            return None
 
-    artist_words = set(artist.lower().split())
-    for r in results:
-        itunes_artist = r.get("artistName", "").lower()
-        if any(word in itunes_artist for word in artist_words):
-            return _extract(r)
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response else 0
+            if status in (429, 403):
+                wait = 5 * (attempt + 1)  # 5s, 10s, 15s
+                print(f"[ITUNES] Rate limited ({status}) — waiting {wait}s — {title}")
+                sleep(wait)
+                continue  # retry
+            print(f"[ITUNES] HTTP error {e} — {title}")
+            return None
 
-    # fallback to first result
-    print(f"[ITUNES] No artist match, using first result — {title}")
-    return _extract(results[0])
+        except requests.exceptions.ConnectionError:
+            print(f"[ITUNES] No connection — {title}")
+            return None
+
+        # success — process response
+        results = response.json().get("results", [])
+        if not results:
+            print(f"[ITUNES] No results — {title} | {artist}")
+            return None
+
+        artist_words = set(artist.lower().split())
+        for r in results:
+            itunes_artist = r.get("artistName", "").lower()
+            if any(word in itunes_artist for word in artist_words):
+                return _extract(r)
+
+        print(f"[ITUNES] No artist match, using first result — {title}")
+        return _extract(results[0])
+
+    print(f"[ITUNES] All retries exhausted — {title}")
+    return None
 
 
 def _extract(r):

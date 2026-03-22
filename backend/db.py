@@ -9,27 +9,30 @@ DB_PATH_LOG = os.path.join(BASE_DIR, "data", "tunelog.db")
 DB_PATH_LIB = os.path.join(BASE_DIR, "data", "songlist.db")
 DB_PATH_USR = os.path.join(BASE_DIR, "data", "users.db")
 
+
 # Database connection
 
+# for song listen history
 def get_db_connection():
     os.makedirs(os.path.dirname(DB_PATH_LOG), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH_LOG)
+    conn = sqlite3.connect(DB_PATH_LOG, timeout=30)  
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")  
     return conn
+
 
 # for library sync
 def get_db_connection_lib():
     os.makedirs(os.path.dirname(DB_PATH_LIB), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH_LIB)
+    conn = sqlite3.connect(DB_PATH_LIB, timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 # for library sync
 def get_db_connection_usr():
-    
     os.makedirs(os.path.dirname(DB_PATH_USR), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH_USR)
+    conn = sqlite3.connect(DB_PATH_USR, timeout=30)  
     conn.row_factory = sqlite3.Row
     return conn
 

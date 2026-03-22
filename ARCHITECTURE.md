@@ -271,8 +271,10 @@ uvicorn api:app --reload --port 8000
 #### `GET /api/ping`
 Health check. Returns `{"status": "OK"}`.
 
+---
+
 #### `GET /api/stats`
-Main dashboard data endpoint. Queries both `tunelog.db` and `songlist.db` and returns:
+Main dashboard data endpoint. Queries both `tunelog.db` and `songlist.db`.
 
 | Field | Source | Description |
 |---|---|---|
@@ -282,6 +284,137 @@ Main dashboard data endpoint. Queries both `tunelog.db` and `songlist.db` and re
 | `most_played_artists` | `tunelog.db` | Top 10 artists by play count |
 | `most_played_songs` | `tunelog.db` | Top 10 songs by play count with title, artist, count |
 
+---
+
+#### `GET /api/sync/status`
+Returns current sync state and library statistics.
+
+| Field | Source | Description |
+|---|---|---|
+| `total_songs` | `songlist.db` | Total songs in library |
+| `explicit_songs` | `songlist.db` | Songs with confirmed explicit tag |
+| `last_sync` | `songlist.db` | Timestamp of most recently synced song |
+| `is_syncing` | `library.py` | Whether sync is currently running |
+| `progress` | `library.py` | Current sync progress (0–100) |
+| `auto_sync` | `library.py` | Hour of day set for auto sync |
+| `use_itunes` | `library.py` | Whether iTunes API is enabled for next sync |
+
+---
+
+#### `GET /api/sync/start?use_itunes=false`
+Triggers a manual library sync.
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `use_itunes` | bool | false | If true, fetches explicit tags via iTunes API (slow ~35 min). If false, fast sync (~2 min) |
+
+Sets `library._startSyncSong = True` — `main.py` picks this up and runs `sync_library()` in a background thread.
+
+Returns `{"status": "started"}` or `{"status": "already_syncing"}` if sync is already running.
+
+---
+
+#### `GET /api/sync/setting?auto_sync_hour=2&use_itunes=false`
+Updates sync settings in memory.
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `auto_sync_hour` | int | 2 | Hour of day (0–23) for automatic daily sync |
+| `use_itunes` | bool | false | Whether to use iTunes API during auto sync |
+
+> Note: Settings are stored in memory only — they reset on restart.
+
+---
+
+#### `POST /auth/login`
+Authenticates against Navidrome and saves user to TuneLog's user DB.
+
+**Request body:**
+```json
+{ "username": "admin", "password": "yourpassword" }
+```
+
+**Response:**
+```json
+{ "status": "success", "JWT": "<navidrome_token>" }
+```
+
+Verifies credentials against Navidrome's `/auth/login`. On success, saves user to `users.db` if not already present and returns the Navidrome JWT for session storage.
+
+---
+
+#### `POST /admin/create-user`
+Creates a new user in both Navidrome and TuneLog's user DB.
+
+**Request body:**
+```json
+{
+  "username": "newuser",
+  "password": "pass123",
+  "isAdmin": false,
+  "admin": "admin",
+  "adminPD": "adminpass",
+  "email": "",
+  "name": "New User"
+}
+```
+
+Flow: validates admin credentials via Navidrome JWT → creates user in Navidrome via `/api/user` → if Navidrome confirms success, inserts into `users.db`.
+
+---
+
+#### `POST /admin/get-users`
+Returns all users registered in TuneLog's `users.db`.
+
+**Request body:**
+```json
+{ "admin": "admin", "adminPD": "adminpass" }
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "users": [
+    { "username": "admin", "password": "...", "isAdmin": true }
+  ]
+}
+```
+
+---
+
+### Sync Flow
+```
+Frontend hits GET /api/sync/start?use_itunes=true
+        ↓
+api.py sets library._toggle_itune = True, library._startSyncSong = True
+        ↓
+main.py loop detects _startSyncSong = True
+        ↓
+Spawns sync_library() in background thread
+        ↓
+sync_library() updates _progress every song, sets _isSyncing = False when done
+        ↓
+Frontend polls GET /api/sync/status to show live progress
+```
+
+### Auto Sync Flow
+```
+main.py loop checks current hour every 30 seconds
+        ↓
+If current_hour == _auto_sync AND not already run today AND not syncing
+        ↓
+Spawns sync_library() in background thread
+```
+
+---
+
+### Design Decisions
+- All aggregation happens server-side in SQL — frontend receives only pre-computed results, never raw rows
+- Single `/api/stats` endpoint covers the entire dashboard — one fetch on page load, no per-component API calls
+- Sync is triggered by flag polling (`_startSyncSong`) rather than direct thread spawning from the API — keeps FastAPI stateless and lets `main.py` own the sync lifecycle
+- CORS is restricted to `localhost:5173` (Vite dev server) — update for production deployment
+- GET is used for sync endpoints instead of POST — TuneLog is local-only with no sensitive data in these calls
 ### Design Decisions
 - All aggregation happens server-side in SQL — frontend receives only pre-computed results, never raw rows
 - Single `/api/stats` endpoint covers the entire dashboard — one fetch on page load, no per-component API calls

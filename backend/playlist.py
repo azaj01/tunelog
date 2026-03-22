@@ -212,13 +212,11 @@ def build_playlist(scores, unheard, wildcards, unheard_ratio, user_id):
         "skip": max(1, round(n * remaining * 0.10)),
     }
 
-    def by_signal(signal):
-        conn = get_db_connection()
+    def by_signal(signal, conn):
         rows = conn.execute(
-            "SELECT DISTINCT song_id FROM listens WHERE signal = ? AND user_id = ?",
-            (signal, user_id),
-        ).fetchall()
-        conn.close()
+        "SELECT DISTINCT song_id FROM listens WHERE signal = ? AND user_id = ?",
+        (signal, user_id),
+    ).fetchall()
         return [r[0] for r in rows]
 
     # Prepare pools
@@ -227,14 +225,15 @@ def build_playlist(scores, unheard, wildcards, unheard_ratio, user_id):
         set(scores.keys()), genre_distribution, slots["unheard"]
     )
 
+    conn_log = get_db_connection()
     # Combined pool logic to draw from
     pools = [
         ("unheard", genre_unheard + [s for s in unheard if s not in genre_unheard]),
         ("wildcard", wildcards),
-        ("positive", by_signal("positive")),
-        ("repeat", by_signal("repeat")),
-        ("partial", by_signal("partial")),
-        ("skip", by_signal("skip")),
+        ("positive", by_signal("positive", conn_log)),
+        ("repeat", by_signal("repeat", conn_log)),
+        ("partial", by_signal("partial", conn_log)),
+        ("skip", by_signal("skip", conn_log)),
     ]
 
     # 1. Fill defined slots first
@@ -319,7 +318,7 @@ def push_playlist(song_ids, user_id):
     print(f"[TuneLog] Playlist pushed for {user_id} — {len(song_ids)} songs")
 
 
-## for user mismatch, two condition user database has less user then lib, it will flag and tell user to add that user via web ui 
+## for user mismatch, two condition user database has less user then lib, it will flag and tell user to add that user via web ui
 # if user database has higher them it will tell which user has not listened to musci
 
 def get_all_users():
