@@ -175,9 +175,8 @@ def log_history(song):
     played = min(song["actual_played"], song["duration"])
     percent_played = min(round((played / song["duration"]) * 100), 100)
     signal = signal_system(percent_played, song["song_id"], song["user_id"])
-    
 
-    #pushing star ratings
+    # pushing star ratings
 
     push_star(song["song_id"] , song["user_id"] , signal)
     # print("signal : ", signal)
@@ -240,25 +239,30 @@ def log_history(song):
 # main function
 
 if __name__ == "__main__":
-
     # Database
     init_db()
     init_db_lib()
 
     # sync library
     sync_library()
+
     # generate playlist
     print("[TuneLog] Generating playlist...")
     generate_playlist()
-    
 
-    # starts uvicorn server
-    uvicorn.run("api:app", host="0.0.0.0", port=8000)
+    # Run uvicorn in background thread
+    uvicornThread = threading.Thread(
+        target=uvicorn.run,
+        args=("api:app",),
+        kwargs={"host": "0.0.0.0", "port": 8000},
+        daemon=True,
+    )
+    uvicornThread.start()
 
-    ##Watcher script
+    # Watcher
+    watcherThread = threading.Thread(target=start_sse, daemon=True)
+    watcherThread.start()
 
-    watcherThread = threading.Thread(target=start_sse , daemon=True).start()
-    # print(watcherThread)
     n = 0
     while True:
         event = event_queue.get()
@@ -268,5 +272,3 @@ if __name__ == "__main__":
             print("Its fucking working")
             print(n)
             Watcher()
-
-    print("watcher is runing")
