@@ -4,13 +4,21 @@
 import sqlite3
 import os
 
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # goes up to tunelog/
-DB_PATH_LOG = os.path.join(BASE_DIR, "data", "tunelog.db")
-DB_PATH_LIB = os.path.join(BASE_DIR, "data", "songlist.db")
-DB_PATH_USR = os.path.join(BASE_DIR, "data", "users.db")
 
+# 1. Determine the base directory for data
+if os.path.exists("/app/data"):
+    # We are inside the Docker container
+    DATA_DIR = "/app/data"
+else:
+    # We are running locally on your PC
+    # This creates a 'data' folder inside your backend directory
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = os.path.join(BASE_DIR, "data")
 
-# Database connection
+# 2. Define the database paths using that directory
+DB_PATH_LOG = os.path.join(DATA_DIR, "tunelog.db")
+DB_PATH_LIB = os.path.join(DATA_DIR, "songlist.db")
+DB_PATH_USR = os.path.join(DATA_DIR, "users.db")
 
 # for song listen history
 def get_db_connection():
