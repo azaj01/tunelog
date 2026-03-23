@@ -80,6 +80,11 @@ Users can be added directly from the TuneLog web dashboard — no manual config 
 
 ## Setup
 
+> ⚠️ **Note:** Docker and manual (`python main.py`) runs are mutually exclusive.
+> Docker marks the `data/` folder as root-owned, so Python cannot write to it outside the container.
+> Run one or the other — not both.
+
+
 ### Web UI (early stage — work in progress)
 
 > ⚠️ The web dashboard is in early development. Data is connected but UI still needs significant polishing. Not production-ready.
