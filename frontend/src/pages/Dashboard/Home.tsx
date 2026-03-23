@@ -7,7 +7,7 @@ import MostSkippedPercentage from "../../components/ecommerce/MostSkippedPercent
 import MostPlaysbyUser from "../../components/ecommerce/MostPlaysbyUser";
 import MostHeardArtist from "../../components/ecommerce/MostHeardArtist";
 import PageMeta from "../../components/common/PageMeta";
-import { fetchStats, Stats } from "../../API/API";
+import { fetchLogin, fetchStats, Stats } from "../../API/API";
 
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -17,11 +17,28 @@ export default function Home() {
     const token =
       localStorage.getItem("tunelog_token") ||
       sessionStorage.getItem("tunelog_token");
-
+     
     if (!token) {
       navigate("/signin");
       return;
     }
+
+
+  const username =
+    localStorage.getItem("tunelog_user") ||
+    sessionStorage.getItem("tunelog_user") ||
+    "";
+  const password =
+    localStorage.getItem("tunelog_password") ||
+    sessionStorage.getItem("tunelog_password") ||
+    "";
+
+  if (username && password) {
+    fetchLogin({ username, password }).catch(() => {
+    });
+  }
+
+
 
     console.log("Fetching data (home)");
     fetchStats().then((data) => setStats(data));
