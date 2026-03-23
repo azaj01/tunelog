@@ -173,6 +173,37 @@ def fetch_all_song():
     return all_song
 
 
+def remove_deleted_songs(navidrome_ids: set):
+    conn = get_db_connection_lib()
+    cursor = conn.cursor()
+
+    db_ids = {
+        row[0] for row in cursor.execute("SELECT song_id FROM library").fetchall()
+    }
+
+    deleted_ids = db_ids - navidrome_ids
+
+    if not deleted_ids:
+        print(f"[CLEANUP] No deleted songs found — library is in sync")
+        conn.close()
+        return
+
+    print(
+        f"[CLEANUP] Found {len(deleted_ids)} songs in DB not in Navidrome — deleting..."
+    )
+
+    for song_id in deleted_ids:
+        title = cursor.execute(
+            "SELECT title FROM library WHERE song_id = ?", (song_id,)
+        ).fetchone()
+        print(f"[CLEANUP DELETE] {title[0] if title else song_id}")
+        cursor.execute("DELETE FROM library WHERE song_id = ?", (song_id,))
+
+    conn.commit()
+    conn.close()
+    print(f"[CLEANUP] Done — removed {len(deleted_ids)} songs")
+
+
 def sync_library():
     global _isSyncing, _progress, _startSyncSong
 
@@ -313,6 +344,13 @@ def sync_library():
 
     conn.commit()
     conn.close()
+
+    # cross-reference — remove songs deleted from Navidrome
+    navidrome_ids = {song["id"] for song in songs}
+    print(
+        f"[CLEANUP] Cross-referencing {len(navidrome_ids)} Navidrome songs against DB..."
+    )
+    remove_deleted_songs(navidrome_ids)
 
     _isSyncing = False
     print(f"[SYNC] done — inserted={inserted} updated={updated} skipped={skipped}")
