@@ -179,17 +179,43 @@ export async function fetchCreateUser(
   if (!res.ok) throw new Error("Failed to create user");
   return res.json();
 }
+const USERS_CACHE_KEY = "tunelog_users_cache";
 
 export async function fetchGetUsers(
   data: AdminAuthRequest,
 ): Promise<GetUsersResponse> {
-  const res = await fetch(`${BASE_URL}/admin/get-users`, {
+  // return cached users immediately while fetching
+  const cached = localStorage.getItem(USERS_CACHE_KEY);
+  console.log("In fetchgetuser cached : ",cached)
+  const cachedUsers: User[] = cached ? JSON.parse(cached) : [];
+
+  const fetchPromise = fetch(`${BASE_URL}/admin/get-users`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error("Failed to get users");
-  return res.json();
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error("Failed to get users");
+      return res.json() as Promise<GetUsersResponse>;
+    })
+    .then((fresh) => {
+      if (fresh.status === "ok" && fresh.users) {
+        // update cache if response differs
+        const freshStr = JSON.stringify(fresh.users);
+        if (freshStr !== JSON.stringify(cachedUsers)) {
+          localStorage.setItem(USERS_CACHE_KEY, freshStr);
+        }
+      }
+      return fresh;
+    });
+
+  // if cache exists, return it immediately and let fetch update in background
+  if (cachedUsers.length > 0) {
+    return { status: "ok", users: cachedUsers };
+  }
+
+  // no cache — wait for the real response
+  return fetchPromise;
 }
 
 export async function fetchPlaylistSongs(

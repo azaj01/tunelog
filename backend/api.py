@@ -255,6 +255,19 @@ def createUser(data: CreateUserData):
         }
 
 
+# @app.post("/admin/get-users")
+# def getUsers(data: AdminAuth):
+#     token = getJWT(data.admin, data.adminPD)
+
+#     if not token:
+#         return {"status": "failed", "reason": "Invalid admin credentials"}
+
+#     conn = get_db_connection_usr()
+#     users = conn.execute("SELECT * FROM user").fetchall()
+#     conn.close()
+
+
+#     return {"status": "ok", "users": [dict(row) for row in users]}
 @app.post("/admin/get-users")
 def getUsers(data: AdminAuth):
     token = getJWT(data.admin, data.adminPD)
@@ -266,7 +279,18 @@ def getUsers(data: AdminAuth):
     users = conn.execute("SELECT * FROM user").fetchall()
     conn.close()
 
-    return {"status": "ok", "users": [dict(row) for row in users]}
+    # explicitly map columns so frontend always gets the right shape
+    return {
+        "status": "ok",
+        "users": [
+            {
+                "username": row["username"],
+                "password": row["password"],
+                "isAdmin": bool(row["isAdmin"]),
+            }
+            for row in users
+        ],
+    }
 
 
 # http://your-server/rest/ping.view?u=joe&t=26719a1196d2a940705a59634eb18eab&s=c19b2d&v=1.12.0&c=myapp

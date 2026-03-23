@@ -7,22 +7,20 @@ import MostSkippedPercentage from "../../components/ecommerce/MostSkippedPercent
 import MostPlaysbyUser from "../../components/ecommerce/MostPlaysbyUser";
 import MostHeardArtist from "../../components/ecommerce/MostHeardArtist";
 import PageMeta from "../../components/common/PageMeta";
-import { fetchLogin, fetchStats, Stats } from "../../API/API";
+import { fetchLogin, fetchStats, Stats , fetchGetUsers} from "../../API/API";
 
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
   const navigate = useNavigate();
+useEffect(() => {
+  const token =
+    localStorage.getItem("tunelog_token") ||
+    sessionStorage.getItem("tunelog_token");
 
-  useEffect(() => {
-    const token =
-      localStorage.getItem("tunelog_token") ||
-      sessionStorage.getItem("tunelog_token");
-     
-    if (!token) {
-      navigate("/signin");
-      return;
-    }
-
+  if (!token) {
+    navigate("/signin");
+    return;
+  }
 
   const username =
     localStorage.getItem("tunelog_user") ||
@@ -34,15 +32,16 @@ export default function Home() {
     "";
 
   if (username && password) {
-    fetchLogin({ username, password }).catch(() => {
-    });
+    fetchLogin({ username, password })
+      .then(() => {
+        // after login ensures user is in DB, pre-cache users list
+        fetchGetUsers({ admin: username, adminPD: password }).catch(() => {});
+      })
+      .catch(() => {});
   }
 
-
-
-    console.log("Fetching data (home)");
-    fetchStats().then((data) => setStats(data));
-  }, []);
+  fetchStats().then((data) => setStats(data));
+}, []);
 
   return (
     <>
