@@ -38,6 +38,8 @@ pip-wheel-metadata/
 # Local databases
 *.db
 *.sqlite3
+*.db-journal
+
 
 # IDE/editor and OS files
 .vscode/

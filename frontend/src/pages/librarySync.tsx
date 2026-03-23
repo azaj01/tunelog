@@ -140,13 +140,23 @@ const formatLastSync = (raw: string | null) => {
     minute: "2-digit",
   });
 };
-  const syncStatusText = () => {
-    if (waitingForSync) return "Waiting for sync to start...";
-    if (isSyncing)
-      return `${syncData?.use_itunes ? "Slow sync" : "Fast sync"} in progress... ${progress}%`;
-    if (progress === 100) return "Sync complete";
-    return "Ready to sync";
-  };
+ const syncStatusText = () => {
+   if (waitingForSync) return "Waiting for sync to start...";
+
+   if (isSyncing) {
+     const syncType = syncData?.use_itunes ? "Slow sync" : "Fast sync";
+     const totalSongs = syncData?.total_songs || 0;
+
+     // Calculate song count and round to the nearest whole number
+     const songCount = Math.round((progress / 100) * totalSongs);
+
+     return `${syncType} in progress... ${progress}% or ${songCount} songs`;
+   }
+
+   if (progress === 100) return "Sync complete";
+
+   return "Ready to sync";
+ };
 
   return (
     <div>
