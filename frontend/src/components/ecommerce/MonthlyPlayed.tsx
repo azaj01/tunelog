@@ -1,140 +1,96 @@
-import Chart from "react-apexcharts";
-import { ApexOptions } from "apexcharts";
-import { Dropdown } from "../ui/dropdown/Dropdown";
-import { DropdownItem } from "../ui/dropdown/DropdownItem";
-import { MoreDotIcon } from "../../icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchMonthlyListens, MonthlyListen } from "../../API/API";
 
 export default function MonthlyPlayed() {
-  const options: ApexOptions = {
-    colors: ["#465fff"],
-    chart: {
-      fontFamily: "Outfit, sans-serif",
-      type: "bar",
-      height: 180,
-      toolbar: {
-        show: false,
-      },
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: "39%",
-        borderRadius: 5,
-        borderRadiusApplication: "end",
-      },
-    },
-    dataLabels: {
-      enabled: false,
-    },
-    stroke: {
-      show: true,
-      width: 4,
-      colors: ["transparent"],
-    },
-    xaxis: {
-      categories: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ],
-      axisBorder: {
-        show: false,
-      },
-      axisTicks: {
-        show: false,
-      },
-    },
-    legend: {
-      show: true,
-      position: "top",
-      horizontalAlign: "left",
-      fontFamily: "Outfit",
-    },
-    yaxis: {
-      title: {
-        text: undefined,
-      },
-    },
-    grid: {
-      yaxis: {
-        lines: {
-          show: true,
-        },
-      },
-    },
-    fill: {
-      opacity: 1,
-    },
+  const [data, setData] = useState<MonthlyListen[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    tooltip: {
-      x: {
-        show: false,
-      },
-      y: {
-        formatter: (val: number) => `${val}`,
-      },
-    },
-  };
-  const series = [
-    {
-      name: "Sales",
-      data: [168, 385, 201, 298, 187, 195, 291, 110, 215, 390, 280, 112],
-    },
-  ];
-  const [isOpen, setIsOpen] = useState(false);
+  useEffect(() => {
+    fetchMonthlyListens()
+      .then((res) => {
+        // Map the YYYY-MM string to a short month name
+        const formatted = res.map((item) => {
+          const date = new Date(item.month + "-01");
+          return {
+            ...item,
+            displayMonth: date.toLocaleString("default", { month: "short" }),
+          };
+        });
+        setData(formatted);
+      })
+      .catch((err) => console.error("Error fetching monthly listens:", err))
+      .finally(() => setLoading(false));
+  }, []);
 
-  function toggleDropdown() {
-    setIsOpen(!isOpen);
+  const maxListens =
+    data.length > 0 ? Math.max(...data.map((m) => m.count)) : 100;
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] animate-pulse">
+        <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+        <div className="h-28 w-full bg-gray-100 dark:bg-gray-800 rounded"></div>
+      </div>
+    );
   }
 
-  function closeDropdown() {
-    setIsOpen(false);
-  }
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white px-5 pt-5 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6 sm:pt-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-          Monthly Plays
-        </h3>
-        <div className="relative inline-block">
-          <button className="dropdown-toggle" onClick={toggleDropdown}>
-            <MoreDotIcon className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 size-6" />
-          </button>
-          <Dropdown
-            isOpen={isOpen}
-            onClose={closeDropdown}
-            className="w-40 p-2"
-          >
-            <DropdownItem
-              onItemClick={closeDropdown}
-              className="flex w-full font-normal text-left text-gray-500 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-            >
-              View More
-            </DropdownItem>
-            <DropdownItem
-              onItemClick={closeDropdown}
-              className="flex w-full font-normal text-left text-gray-500 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-            >
-              Delete
-            </DropdownItem>
-          </Dropdown>
-        </div>
+    <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+      <h4 className="text-base font-semibold text-gray-800 dark:text-white/90 mb-1">
+        Monthly Listens
+      </h4>
+      <p className="text-xs text-gray-400 mb-5">
+        Listens per month — last 6 months
+      </p>
+
+      <div className="flex items-end gap-2 h-32">
+        {data.length > 0 ? (
+          data.map((m, i) => {
+            const pct = Math.round((m.count / maxListens) * 100);
+            const isLast = i === data.length - 1;
+
+            return (
+              <div
+                key={m.month}
+                className="flex-1 flex flex-col items-center gap-1 group"
+              >
+
+
+                <span className="text-[10px] font-medium text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {m.count}
+                </span>
+
+                <div
+                  className="w-full flex items-end"
+                  style={{ height: "80px" }}
+                >
+                  <div
+                    className={`w-full rounded-t-lg transition-all duration-700 ease-out ${
+                      isLast
+                        ? "bg-brand-500 shadow-lg shadow-brand-500/20"
+                        : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                    }`}
+                    style={{ height: `${Math.max(pct, 5)}%` }} // Ensure at least a sliver is visible
+                  />
+                </div>
+                <span className="text-xs font-medium text-gray-400 mt-1">
+                  {(m as any).displayMonth}
+                </span>
+              </div>
+            );
+          })
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs italic">
+            No listen history found for the last 6 months
+          </div>
+        )}
       </div>
 
-      <div className="max-w-full overflow-x-auto custom-scrollbar">
-        <div className="-ml-5 min-w-[650px] xl:min-w-full pl-2">
-          <Chart options={options} series={series} type="bar" height={180} />
-        </div>
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">
+          Live Data
+        </p>
+        <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></div>
       </div>
     </div>
   );

@@ -1,102 +1,86 @@
-// To show admin the skip rate of songs
-// by percentage
-// skipped in 1st 30sec = 10%
-// and so on
+import { Stats } from "../../API/API";
 
-
-
-import { useState, useEffect } from "react";
-
-type Signals = {
-  partial: number;
-  positive: number;
-  repeat: number;
-  skip: number;
-};
-
-type Stats = {
-  total_songs: number;
-  total_listens: number;
-  signals: Signals;
-  most_played_artists: Record<string, number>;
-  most_played_songs: {
-    title: string;
-    artist: string;
-    play_count: number;
-  }[];
-};
-
-type Percentage = {
-  partial: number;
-  positive: number;
-  repeat: number;
-  skip: number;
-};
-
-function calculatePercentages(signals: Signals): Percentage {
-  const total = Object.values(signals).reduce((sum, val) => sum + val, 0);
-  if (total === 0) return { partial: 0, positive: 0, repeat: 0, skip: 0 };
-
-  return {
-    partial: Math.round((signals.partial / total) * 100),
-    positive: Math.round((signals.positive / total) * 100),
-    repeat: Math.round((signals.repeat / total) * 100),
-    skip: Math.round((signals.skip / total) * 100),
-  };
+interface Props {
+  stats: Stats | null;
 }
 
-export default function MostSkippedPercentage({
-  stats,
-}: {
-  stats: Stats | null;
-}) {
-  const [percentage, setPercentage] = useState<Percentage | null>(null);
+// const SIGNAL_STYLE: Record<
+//   string,
+//   { color: string; bg: string; border: string; label: string }
+// > = {
+//   skip: {
+//     color: "text-red-400",
+//     bg: "bg-red-500/10",
+//     border: "border-red-500/20",
+//     label: "Skip",
+//   },
+//   partial: {
+//     color: "text-yellow-400",
+//     bg: "bg-yellow-500/10",
+//     border: "border-yellow-500/20",
+//     label: "Partial",
+//   },
+//   positive: {
+//     color: "text-green-400",
+//     bg: "bg-green-500/10",
+//     border: "border-green-500/20",
+//     label: "Complete",
+//   },
+//   repeat: {
+//     color: "text-purple-400",
+//     bg: "bg-purple-500/10",
+//     border: "border-purple-500/20",
+//     label: "Repeat",
+//   },
+// };
 
-  useEffect(() => {
-    if (!stats) return;
-    setPercentage(calculatePercentages(stats.signals));
-  }, [stats]);
-
-  const listenRatio =
-    stats && stats.total_songs > 0
-      ? ((stats.total_listens / stats.total_songs) * 100).toFixed(2)
-      : "0.00";
+export default function MostSkippedPercentage({ stats }: Props) {
+  const songs = stats?.most_played_songs ?? [];
+  const total = stats?.total_listens ?? 0;
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03]">
-      <div className="px-5 pt-5 bg-white shadow-default rounded-2xl pb-11 dark:bg-gray-900 sm:px-6 sm:pt-6">
-        <div className="flex justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-              Most skipped song this Monthly
-            </h3>
-          </div>
+    <div className="rounded-2xl border border-gray-200 overflow-y-auto h-96 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+      <h4 className="text-base font-semibold text-gray-800 dark:text-white/90 mb-1">
+        Most Played Songs
+      </h4>
+      <p className="text-xs text-gray-400 mb-5">Top 10 by play count</p>
+
+      {songs.length === 0 ? (
+        <p className="text-sm text-gray-400">No listen data yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {songs.map((song, i) => {
+            const pct =
+              total > 0 ? ((song.play_count / total) * 100).toFixed(1) : "0";
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
+              >
+                <span className="w-5 text-xs text-gray-400 text-right flex-shrink-0">
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 dark:text-white/90 truncate">
+                    {song.title}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">
+                    {song.artist}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs text-gray-400">
+                    {song.play_count}×
+                  </span>
+                  <span className="text-xs text-gray-400 hidden sm:inline">
+                    ({pct}%)
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div className="relative ">
-          <div className="max-h-[330px]" id="chartDarkStyle"></div>
-        </div>
-        <p className="mx-auto mt-4 w-full max-w-[380px] text-left text-lg text-black dark:text-white">
-          <b className="text-xl text-gray-500">Skips</b> : {percentage?.skip}%
-          or {stats?.signals.skip} songs
-        </p>
-        <p className="mx-auto mt-4 w-full max-w-[380px] text-left text-lg text-black dark:text-white">
-          <b className="text-xl text-gray-500">Partial Complete</b> :{" "}
-          {percentage?.partial}% or {stats?.signals.partial} songs
-        </p>{" "}
-        <p className="mx-auto mt-4 w-full max-w-[380px] text-left text-lg text-black dark:text-white ">
-          <b className="text-xl text-gray-500">Complete</b> :{" "}
-          {percentage?.positive}% or {stats?.signals.positive} songs
-        </p>{" "}
-        <p className="mx-auto mt-4 w-full max-w-[380px] text-left text-lg text-black dark:text-white">
-          <b className="text-xl text-gray-500">Repeated</b> :{" "}
-          {percentage?.repeat}% or {stats?.signals.repeat} songs
-        </p>{" "}
-        <p className="mx-auto mt-4 w-full max-w-[380px] text-left text-lg text-black dark:text-white">
-          <b className="text-xl text-gray-500">Total listens</b> : {listenRatio}
-          % or {stats?.total_listens} songs
-        </p>{" "}
-      </div>
-      <div></div>
+      )}
     </div>
   );
 }

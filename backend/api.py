@@ -520,7 +520,6 @@ def getUserProfile(username: str, password: str):
     signal_map = {row[0]: row[1] for row in counts}
     total = sum(signal_map.values())
 
-
     last = lc.execute(
         """
         SELECT timestamp FROM listens
@@ -529,8 +528,6 @@ def getUserProfile(username: str, password: str):
     """,
         (username,),
     ).fetchone()
-
-
 
     top_songs_raw = lc.execute(
         """
@@ -568,7 +565,6 @@ def getUserProfile(username: str, password: str):
             }
         )
 
-
     top_artists_raw = lc.execute(
         """
         SELECT song_id, COUNT(*) as cnt
@@ -594,7 +590,6 @@ def getUserProfile(username: str, password: str):
         key=lambda x: x["count"],
         reverse=True,
     )[:20]
-
 
     top_genres_raw = lc.execute(
         """
@@ -663,6 +658,25 @@ def getUserProfile(username: str, password: str):
         "topGenres": top_genres,
         "recentHistory": recent_history,
     }
+
+
+@app.get("/api/library/getMonthlyListens")
+def getMonthlyListens():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT 
+            strftime('%Y-%m', timestamp) as month, 
+            COUNT(*) as count 
+        FROM listens 
+        WHERE timestamp >= date('now', '-6 months')
+        GROUP BY month
+        ORDER BY month ASC
+    """
+
+    rows = cursor.execute(query).fetchall()
+    conn.close()
+    return [{"month": row[0], "count": row[1]} for row in rows]
 
 
 if __name__ == "__main__":

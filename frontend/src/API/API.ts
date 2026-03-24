@@ -133,7 +133,6 @@ export interface UserDataResponse {
   reason?: string;
 }
 
-
 export interface UserProfileResponse {
   status: "ok" | "failed";
   totalListens: number;
@@ -146,7 +145,7 @@ export interface UserProfileResponse {
     title: string;
     artist: string;
     count: number;
-    signal: string; 
+    signal: string;
   }[];
   topArtists: {
     artist: string;
@@ -163,6 +162,11 @@ export interface UserProfileResponse {
     signal: string;
     listened_at: string;
   }[];
+}
+
+export interface MonthlyListen {
+  month: string; 
+  count: number;
 }
 
 // API Calls
@@ -232,7 +236,6 @@ const USERS_CACHE_KEY = "tunelog_users_cache";
 export async function fetchGetUsers(
   data: AdminAuthRequest,
 ): Promise<GetUsersResponse> {
-  // return cached users immediately while fetching
   const cached = localStorage.getItem(USERS_CACHE_KEY);
   console.log("In fetchgetuser cached : ", cached);
   const cachedUsers: User[] = cached ? JSON.parse(cached) : [];
@@ -248,7 +251,6 @@ export async function fetchGetUsers(
     })
     .then((fresh) => {
       if (fresh.status === "ok" && fresh.users) {
-        // update cache if response differs
         const freshStr = JSON.stringify(fresh.users);
         if (freshStr !== JSON.stringify(cachedUsers)) {
           localStorage.setItem(USERS_CACHE_KEY, freshStr);
@@ -257,12 +259,10 @@ export async function fetchGetUsers(
       return fresh;
     });
 
-  // if cache exists, return it immediately and let fetch update in background
   if (cachedUsers.length > 0) {
     return { status: "ok", users: cachedUsers };
   }
 
-  // no cache — wait for the real response
   return fetchPromise;
 }
 
@@ -298,24 +298,15 @@ export async function fetchUserData(
   username: string,
   password: string,
 ): Promise<UserDataResponse> {
-  console.log("fetching user data")
-  console.log("username : " ,username , "password" , password)
   const query = new URLSearchParams({ username, password }).toString();
-  const res = await fetch(`${BASE_URL}/admin/getUserData?${query}`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-  });
-
-  const response = res.json()
-  console.log(response)
+  const res = await fetch(`${BASE_URL}/admin/getUserData?${query}`);
 
   if (!res.ok) throw new Error("Failed to fetch user data");
-  return response;
+
+  const data = await res.json();
+  return data;
 }
 
-
-
- 
 export interface UserDataResponse {
   status: "ok" | "failed";
   totalListens: number;
@@ -325,8 +316,6 @@ export interface UserDataResponse {
   repeat: number;
   lastLogged: string;
 }
-
-
 
 export async function fetchUserProfile(
   username: string,
@@ -338,4 +327,9 @@ export async function fetchUserProfile(
   if (!res.ok) throw new Error("Failed to fetch user profile");
   return res.json();
 }
- 
+
+export async function fetchMonthlyListens(): Promise<MonthlyListen[]> {
+  const res = await fetch(`${BASE_URL}/api/library/getMonthlyListens`);
+  if (!res.ok) throw new Error("Failed to fetch monthly listens");
+  return res.json();
+}
