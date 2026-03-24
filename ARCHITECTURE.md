@@ -60,6 +60,7 @@ This document outlines the technical architecture, data flow, and design decisio
 - [Genre Injection](#genre-injection)
 - [Playlist Slot System](#playlist-slot-system)
 - [Timezone Safety](#timezone-safety)
+- [Web ui and API layer](#Web-UI-&-API-Layer)
 - [Multi-User Setup](#multi-user-setup)
 - [Known Limitations](#known-limitations)
   
@@ -282,135 +283,69 @@ USER_CREDENTIALS = {
 ```
 ## Web UI & API Layer
 
-TuneLog includes a FastAPI backend that exposes SQLite data to the React dashboard.
+TuneLog utilizes a FastAPI backend to bridge the Gap between the Navidrome API and the React-based Dashboard. It manages three distinct SQLite databases: `tunelog.db` (listens), `songlist.db` (library), and `users.db` (app users).
 
-### Stack
-- **FastAPI** — Python REST API server
-- **React + TypeScript + Vite** — frontend dashboard (TailAdmin base)
-- **SQLite → FastAPI → React** — all data flows server-side, frontend only receives pre-computed results
+### 1. User & Admin Management
+Endpoints for handling authentication and multi-user synchronization.
 
-### Running the API
-```bash
-cd backend
-uvicorn api:app --reload --port 8000
-```
-
-### Endpoints
-
-#### `GET /api/ping`
-Health check. Returns `{"status": "OK"}`.
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/auth/login` | `POST` | Validates against Navidrome; creates a local record in `users.db` on first success. Returns a JWT. |
+| `/admin/create-user` | `POST` | Admin-only. Creates a new user in both Navidrome and the local TuneLog database. |
+| `/admin/get-users` | `POST` | Returns a list of all users registered in the local system (includes Admin status). |
+| `/admin/getUserData` | `GET` | Fetches a high-level "Stat Card" for a specific user (Skips, Repeats, Last Logged). |
 
 ---
 
-#### `GET /api/stats`
-Main dashboard data endpoint. Queries both `tunelog.db` and `songlist.db`.
+### 2. Library Sync & Metadata
+Handles the ingestion of Navidrome library data and optional enrichment via iTunes.
 
-| Field | Source | Description |
-|---|---|---|
-| `total_songs` | `songlist.db` | Total songs in library |
-| `total_listens` | `tunelog.db` | Total listen events logged |
-| `signals` | `tunelog.db` | Count per signal type (skip/partial/positive/repeat) |
-| `most_played_artists` | `tunelog.db` | Top 10 artists by play count |
-| `most_played_songs` | `tunelog.db` | Top 10 songs by play count with title, artist, count |
-
----
-
-#### `GET /api/sync/status`
-Returns current sync state and library statistics.
-
-| Field | Source | Description |
-|---|---|---|
-| `total_songs` | `songlist.db` | Total songs in library |
-| `explicit_songs` | `songlist.db` | Songs with confirmed explicit tag |
-| `last_sync` | `songlist.db` | Timestamp of most recently synced song |
-| `is_syncing` | `library.py` | Whether sync is currently running |
-| `progress` | `library.py` | Current sync progress (0–100) |
-| `auto_sync` | `library.py` | Hour of day set for auto sync |
-| `use_itunes` | `library.py` | Whether iTunes API is enabled for next sync |
+* **`GET /api/sync/status`**: Returns real-time sync state. 
+    * Includes `explicit_counts` (Explicit, Cleaned, NotInItunes, Pending).
+    * Shows `progress` percentage and `is_syncing` boolean.
+* **`GET /api/sync/start`**: Triggers `library.triggerSync()`. 
+    * Accepts `use_itunes` boolean to toggle slow metadata enrichment.
+* **`GET /api/sync/stop`**: Sets `library._stopSync = True` to gracefully kill an active sync thread.
+* **`GET /api/sync/setting`**: Persists `auto_sync_hour` and `use_itunes` preferences in memory.
 
 ---
 
-#### `GET /api/sync/start?use_itunes=false`
-Triggers a manual library sync.
+### 3. Playlist Engine
+Interacts with the scoring logic to generate and retrieve personalized music.
 
-| Param | Type | Default | Description |
-|---|---|---|---|
-| `use_itunes` | bool | false | If true, fetches explicit tags via iTunes API (slow ~35 min). If false, fast sync (~2 min) |
-
-Sets `library._startSyncSong = True` — `main.py` picks this up and runs `sync_library()` in a background thread.
-
-Returns `{"status": "started"}` or `{"status": "already_syncing"}` if sync is already running.
-
----
-
-#### `GET /api/sync/setting?auto_sync_hour=2&use_itunes=false`
-Updates sync settings in memory.
-
-| Param | Type | Default | Description |
-|---|---|---|---|
-| `auto_sync_hour` | int | 2 | Hour of day (0–23) for automatic daily sync |
-| `use_itunes` | bool | false | Whether to use iTunes API during auto sync |
-
-> Note: Settings are stored in memory only — they reset on restart.
+* **`GET /api/playlist/songs`**: 
+    * Retrieves the current cached playlist for a user.
+    * **Live Aggregation**: Calculates `top_genre` and `total_songs` from the current playlist snapshot.
+* **`GET /api/playlist/generate`**: 
+    * Triggers the scoring algorithm.
+    * Parameters: `explicit_filter` (string) and `size` (integer).
+    * **Workflow**: Scores songs → Injects Unheard (Genre Weighted) → Adds Wildcards → Pushes to Navidrome.
 
 ---
 
-#### `POST /auth/login`
-Authenticates against Navidrome and saves user to TuneLog's user DB.
+### 4. Advanced User Analytics (The Profile Deep-Dive)
+The `/api/user/profile` endpoint is the most complex, performing cross-database aggregation.
 
-**Request body:**
-```json
-{ "username": "admin", "password": "yourpassword" }
-```
-
-**Response:**
-```json
-{ "status": "success", "JWT": "<navidrome_token>" }
-```
-
-Verifies credentials against Navidrome's `/auth/login`. On success, saves user to `users.db` if not already present and returns the Navidrome JWT for session storage.
-
----
-
-#### `POST /admin/create-user`
-Creates a new user in both Navidrome and TuneLog's user DB.
-
-**Request body:**
-```json
-{
-  "username": "newuser",
-  "password": "pass123",
-  "isAdmin": false,
-  "admin": "admin",
-  "adminPD": "adminpass",
-  "email": "",
-  "name": "New User"
-}
-```
-
-Flow: validates admin credentials via Navidrome JWT → creates user in Navidrome via `/api/user` → if Navidrome confirms success, inserts into `users.db`.
+#### Data Aggregation Logic:
+1.  **Signal Distribution**: Counts all `skip`, `partial`, `positive`, and `repeat` events from `listens`.
+2.  **Top 20 Songs**: 
+    * Groups by `song_id` in `tunelog.db`.
+    * Hydrates titles/artists from `songlist.db`.
+    * Determines the "Primary Signal" for each song (most frequent interaction type).
+3.  **Top 20 Artists**: 
+    * Aggregates counts across all songs.
+    * **Normalization**: Splits semicolon-separated artist strings (e.g., `"Artist A; Artist B"`) to count toward the primary performer.
+4.  **Top 15 Genres**: 
+    * Ranks genres by total listen frequency.
+5.  **Recent History**: 
+    * Returns the last 100 events with full metadata, including the specific `listened_at` timestamp.
 
 ---
 
-#### `POST /admin/get-users`
-Returns all users registered in TuneLog's `users.db`.
-
-**Request body:**
-```json
-{ "admin": "admin", "adminPD": "adminpass" }
-```
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "users": [
-    { "username": "admin", "password": "...", "isAdmin": true }
-  ]
-}
-```
-
----
+### API Design Decisions
+* **Application-Level Joins**: Since metadata and listen logs reside in separate SQLite files, the API performs the "Join" logic in Python to keep the databases modular and portable.
+* **Stateless Frontend**: The frontend never calculates stats. It receives pre-computed objects (e.g., `top_genre`, `signal_map`) to ensure the Dashboard remains fast on low-power devices.
+* **Flag-Based Sync**: The API doesn't run the sync directly; it sets flags (`_startSyncSong`) that the main `Watcher` loop picks up. This prevents blocking the API thread during the long iTunes 429-backoff periods.
 
 ### Sync Flow
 ```
