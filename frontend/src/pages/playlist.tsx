@@ -9,7 +9,8 @@ import {
   fetchGetUsers,
   PlaylistSong,
   PlaylistStats,
-  fetchLogin
+  fetchLogin,
+  appendPlaylist
 } from "../API/API";
 import { useNavigate } from "react-router";
 
@@ -139,11 +140,23 @@ useEffect(() => {
     setIsGenerating(true);
     setGenerateMsg("");
     try {
-      const res = await fetchPlaylistGenerate(
-        selectedUser,
-        explicitFilter,
-        playlistSize,
-      );
+      let res : any ;
+      if (syncMode == "regenerate") {
+
+        res = await fetchPlaylistGenerate(
+          selectedUser,
+          explicitFilter,
+          playlistSize,
+        );
+      }
+      else {
+
+        res = await appendPlaylist(
+          selectedUser,
+          explicitFilter,
+          playlistSize,
+        );
+      }
       if (res.status === "ok") {
         setGenerateMsg(`✓ Done — ${res.songs_added} songs`);
         const updated = await fetchPlaylistSongs(selectedUser);

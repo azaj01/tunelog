@@ -49,7 +49,7 @@ from datetime import datetime
 from config import build_url, event_queue
 from db import get_db_connection, init_db, init_db_lib, init_db_usr, init_db_playlist
 import library
-from playlist import main as generate_playlist
+# from playlist import main as generate_playlist
 from library import normalise_genre
 from watcher import start_sse
 from misc import push_star
@@ -243,16 +243,17 @@ def log_history(song):
 
 if __name__ == "__main__":
     # Database
+    print("Initializing databse")
     init_db()
     init_db_lib()
     init_db_usr()
     init_db_playlist()
 
-    library.sync_library()
+    # library.sync_library()
 
     # generate playlist
-    print("[TuneLog] Generating playlist...")
-    generate_playlist()
+    # print("[TuneLog] Generating playlist...")
+    # generate_playlist()
 
     # Run uvicorn in background thread
     uvicornThread = threading.Thread(

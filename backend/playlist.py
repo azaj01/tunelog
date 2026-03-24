@@ -44,6 +44,10 @@
 # Fix : Added a check loop, if counter is less then playlist size, run the loop again
 
 
+# TODO add an playlist id in userdatabase so when playlist is created it updates it
+# DONE 
+
+
 from datetime import datetime
 import requests
 import random
@@ -221,6 +225,21 @@ def get_allowed_song_ids(explicit_filter: str) -> set:
     return {row[0] for row in rows}
 
 
+def getPlaylistId(username):
+    conn = get_db_connection_usr()
+    cursor = conn.cursor()
+
+    result = cursor.execute(
+        "SELECT playlistId FROM user WHERE username = ?", (username,)
+    ).fetchone()
+
+    conn.close()
+
+    if result:
+        return result[0]
+    return None
+
+
 def build_playlist(
     scores,
     unheard,
@@ -325,38 +344,140 @@ def build_playlist(
     return playlist_ids[:n], song_signals
 
 
+# VERSION 1 OF PUSH PLAYLIST FUNCTION
+
+# def push_playlist(song_ids, user_id, song_signals):
+#     USER_CREDENTIALS = getAllUser()
+#     name = PLAYLIST_NAME.format(user_id)
+#     password = USER_CREDENTIALS.get(user_id)
+#     playlist_id = getPlaylistId(user_id)
+#     if not password:
+#         print(f"[TuneLog] No credentials found for {user_id}, skipping")
+#         return
+
+#     r = requests.get(build_url_for_user("getPlaylists", user_id, password)).json()
+#     playlists = r["subsonic-response"]["playlists"].get("playlist", [])
+
+#     # for pl in playlists:
+#     #     if pl["name"] == name:
+#     #         requests.get(
+#     #             build_url_for_user("deletePlaylist", user_id, password)
+#     #             + f"&id={pl['id']}"
+#     #         )
+#     #         break
+
+# # http://<your-navidrome-url>/rest/createPlaylist.view?u=<user>&p=<pass>&v=1.16.1&c=TuneLog&f=json&playlistId=<stored_playlist_id>&songId=<id1>&songId=<id2>&songId=<id3>
+
+
+#     url = build_url_for_user("createPlaylist", user_id, password) + f"&name={name} "
+#     data = [("songId", sid) for sid in song_ids]
+#     r = requests.post(url, data=data).json()
+
+#     new_id = r["subsonic-response"]["playlist"]["id"]
+#     requests.get(
+#         build_url_for_user("updatePlaylist", user_id, password)
+#         + f"&playlistId={new_id}&public=false"
+#     )
+
+#     print(f"[TuneLog] Playlist pushed for {user_id} — {len(song_ids)} songs")
+
+#     conn_lib = get_db_connection_lib()
+#     placeholders = ",".join("?" * len(song_ids))
+#     rows = conn_lib.execute(
+#         f"SELECT song_id, title, artist, genre, explicit FROM library WHERE song_id IN ({placeholders})",
+#         song_ids,
+#     ).fetchall()
+#     conn_lib.close()
+
+#     conn = get_db_connection_playlist()
+#     cursor = conn.cursor()
+#     cursor.execute("DELETE FROM playlist WHERE username = ?", (user_id,))
+#     cursor.executemany(
+#         """
+#         INSERT INTO playlist (username, song_id, title, artist, genre, signal, explicit)
+#         VALUES (?, ?, ?, ?, ?, ?, ?)
+#         """,
+#         [
+#             (
+#                 user_id,
+#                 row[0],
+#                 row[1],
+#                 row[2],
+#                 row[3],
+#                 song_signals.get(row[0]) or "unheard",
+#                 row[4],
+#             )
+#             for row in rows
+#         ],
+#     )
+#     conn.commit()
+#     conn.close()
+#     print(f"[TuneLog] Playlist saved to DB for {user_id} — {len(rows)} songs")
+
+
+
+# VERSION 2 OF PUSH PLAYLIST 
+
+
 def push_playlist(song_ids, user_id, song_signals):
     USER_CREDENTIALS = getAllUser()
-    name = PLAYLIST_NAME.format(user_id)
     password = USER_CREDENTIALS.get(user_id)
 
     if not password:
         print(f"[TuneLog] No credentials found for {user_id}, skipping")
         return
 
-    r = requests.get(build_url_for_user("getPlaylists", user_id, password)).json()
-    playlists = r["subsonic-response"]["playlists"].get("playlist", [])
+    
+    stored_playlist_id = getPlaylistId(user_id)
+    name = PLAYLIST_NAME.format(user_id)
 
-    for pl in playlists:
-        if pl["name"] == name:
-            requests.get(
-                build_url_for_user("deletePlaylist", user_id, password)
-                + f"&id={pl['id']}"
-            )
-            break
+    
+    base_url = build_url_for_user("createPlaylist", user_id, password)
+    if stored_playlist_id and stored_playlist_id != "no users/playlist id":
+        url = f"{base_url}&playlistId={stored_playlist_id}"
+        print(
+            f"[TuneLog] Updating existing playlist {stored_playlist_id} for {user_id}"
+        )
+    else:
+        url = f"{base_url}&name={name}"
+        print(f"[TuneLog] Creating new playlist for {user_id}")
 
-    url = build_url_for_user("createPlaylist", user_id, password) + f"&name={name}"
+    
+    
     data = [("songId", sid) for sid in song_ids]
-    r = requests.post(url, data=data).json()
+    try:
+        r = requests.post(url, data=data).json()
 
-    new_id = r["subsonic-response"]["playlist"]["id"]
-    requests.get(
-        build_url_for_user("updatePlaylist", user_id, password)
-        + f"&playlistId={new_id}&public=false"
-    )
+        if "subsonic-response" not in r or r["subsonic-response"]["status"] == "failed":
+            error = (
+                r.get("subsonic-response", {})
+                .get("error", {})
+                .get("message", "Unknown error")
+            )
+            print(f"[ERROR] Navidrome API failed: {error}")
+            return
 
-    print(f"[TuneLog] Playlist pushed for {user_id} — {len(song_ids)} songs")
+        new_id = r["subsonic-response"]["playlist"]["id"]
 
+        if not stored_playlist_id or stored_playlist_id == "no users/playlist id":
+            conn_usr = get_db_connection_usr()
+            conn_usr.execute(
+                "UPDATE user SET playlistId = ? WHERE username = ?", (new_id, user_id)
+            )
+            conn_usr.commit()
+            conn_usr.close()
+            print(f"[TuneLog] Saved new playlist ID {new_id} to database for {user_id}")
+
+        requests.get(
+            build_url_for_user("updatePlaylist", user_id, password)
+            + f"&playlistId={new_id}&public=false"
+        )
+
+    except Exception as e:
+        print(f"[ERROR] Failed to push playlist: {e}")
+        return
+
+    print(f"[TuneLog] Syncing {len(song_ids)} songs to local playlist.db...")
     conn_lib = get_db_connection_lib()
     placeholders = ",".join("?" * len(song_ids))
     rows = conn_lib.execute(
@@ -365,30 +486,116 @@ def push_playlist(song_ids, user_id, song_signals):
     ).fetchall()
     conn_lib.close()
 
+    lib_data = {row[0]: row for row in rows}
+
     conn = get_db_connection_playlist()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM playlist WHERE username = ?", (user_id,))
+
+    insert_data = []
+    for sid in song_ids:
+        row = lib_data.get(sid)
+        if row:
+            insert_data.append(
+                (
+                    user_id,
+                    row[0],  # song_id
+                    row[1],  # title
+                    row[2],  # artist
+                    row[3],  # genre
+                    song_signals.get(sid, "unheard"),
+                    row[4],  # explicit
+                )
+            )
+
     cursor.executemany(
         """
         INSERT INTO playlist (username, song_id, title, artist, genre, signal, explicit)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        [
-            (
-                user_id,
-                row[0],
-                row[1],
-                row[2],
-                row[3],
-                song_signals.get(row[0]) or "unheard",
-                row[4],
-            )
-            for row in rows
-        ],
+        insert_data,
     )
     conn.commit()
     conn.close()
-    print(f"[TuneLog] Playlist saved to DB for {user_id} — {len(rows)} songs")
+    print(f"[TuneLog] Success: Playlist fully synced for {user_id}")
+
+
+# INITIAL DRAFT 
+
+# def append_playlist(song_ids, user_id, song_signals):
+#     USER_CREDENTIALS = getAllUser()
+#     password = USER_CREDENTIALS.get(user_id)
+#     stored_playlist_id = getPlaylistId(user_id)
+
+#     if not password or not stored_playlist_id:
+#         print(
+#             f"[TuneLog] Cannot append: Missing credentials or playlist ID for {user_id}"
+#         )
+#         return False
+
+#     # 1. Navidrome API: updatePlaylist with songIdToAdd
+#     # This appends to the end of the existing playlist
+#     url = (
+#         build_url_for_user("updatePlaylist", user_id, password)
+#         + f"&playlistId={stored_playlist_id}"
+#     )
+
+#     # Navidrome expects 'songIdToAdd' for appending
+#     data = [("songIdToAdd", sid) for sid in song_ids]
+
+#     try:
+#         r = requests.post(url, data=data).json()
+#         if "subsonic-response" not in r or r["subsonic-response"]["status"] == "failed":
+#             print(f"[ERROR] Navidrome append failed")
+#             return False
+
+#         print(f"[TuneLog] Appended {len(song_ids)} songs to Navidrome for {user_id}")
+
+#     except Exception as e:
+#         print(f"[ERROR] Append request failed: {e}")
+#         return False
+
+#     # 2. Update local playlist.db (Add to existing instead of DELETE)
+#     conn_lib = get_db_connection_lib()
+#     placeholders = ",".join("?" * len(song_ids))
+#     rows = conn_lib.execute(
+#         f"SELECT song_id, title, artist, genre, explicit FROM library WHERE song_id IN ({placeholders})",
+#         song_ids,
+#     ).fetchall()
+#     conn_lib.close()
+
+#     lib_data = {row[0]: row for row in rows}
+#     conn = get_db_connection_playlist()
+#     cursor = conn.cursor()
+
+#     insert_data = []
+#     for sid in song_ids:
+#         row = lib_data.get(sid)
+#         if row:
+#             insert_data.append(
+#                 (
+#                     user_id,
+#                     row[0],
+#                     row[1],
+#                     row[2],
+#                     row[3],
+#                     song_signals.get(sid, "unheard"),
+#                     row[4],
+#                 )
+#             )
+
+#     # We use INSERT OR IGNORE to prevent Primary Key errors if a song is already there
+#     cursor.executemany(
+#         """
+#         INSERT OR IGNORE INTO playlist (username, song_id, title, artist, genre, signal, explicit)
+#         VALUES (?, ?, ?, ?, ?, ?, ?)
+#         """,
+#         insert_data,
+#     )
+#     conn.commit()
+#     conn.close()
+#     print(f"[TuneLog] Local playlist.db updated (appended {len(insert_data)} rows)")
+#     return True
 
 
 ## for user mismatch, two condition user database has less user then lib, it will flag and tell user to add that user via web ui
@@ -429,24 +636,125 @@ def get_all_users():
     return list(valid_users)
 
 
-def main():
-    users = get_all_users()
+def appendPlaylist(user_id, password , explicit_filter , size):
+    # 1. Generate the candidate songs using your existing logic
+    scores = score_song(user_id)
+    unheard, unheard_ratio = get_unheard_songs(scores)
+    wildcards = get_wildcard_songs(scores, user_id)
+    playlist, song_signals = build_playlist(
+        scores,
+        unheard,
+        wildcards,
+        unheard_ratio,
+        user_id,
+        explicit_filter,
+        size
+    )
 
-    for user_id in users:
-        print(f"[TuneLog] Building playlist for {user_id}...")
-        scores = score_song(user_id)
-        unheard, unheard_ratio = get_unheard_songs(scores)
-        wildcards = get_wildcard_songs(scores, user_id)
-        playlist, song_signals = build_playlist(
-            scores,
-            unheard,
-            wildcards,
-            unheard_ratio,
-            user_id,
-            explicit_filter="allow_cleaned",
+    stored_playlist_id = getPlaylistId(user_id)
+    name = PLAYLIST_NAME.format(user_id)
+
+    if stored_playlist_id and stored_playlist_id != "no users/playlist id":
+        url = (
+            build_url_for_user("updatePlaylist", user_id, password)
+            + f"&playlistId={stored_playlist_id}"
         )
-        push_playlist(playlist, user_id, song_signals)
+
+        data = [("songIdToAdd", sid) for sid in playlist]
+        print(
+            f"[TuneLog] Appending {len(playlist)} songs to playlist {stored_playlist_id} for {user_id}"
+        )
+    else:
+
+        url = build_url_for_user("createPlaylist", user_id, password) + f"&name={name}"
+        data = [("songId", sid) for sid in playlist]
+        print(
+            f"[TuneLog] No ID found. Creating new playlist for {user_id} instead of appending."
+        )
+
+    try:
+        r = requests.post(url, data=data).json()
+
+        # If we had to create a new one, save that ID to the DB
+        if not stored_playlist_id or stored_playlist_id == "no users/playlist id":
+            new_id = r["subsonic-response"]["playlist"]["id"]
+            conn_usr = get_db_connection_usr()
+            conn_usr.execute(
+                "UPDATE user SET playlistId = ? WHERE username = ?", (new_id, user_id)
+            )
+            conn_usr.commit()
+            conn_usr.close()
+            print(f"[TuneLog] New playlist ID {new_id} saved to user DB.")
+    except Exception as e:
+        print(f"[ERROR] Navidrome communication failed: {e}")
+        return False
+
+
+    conn_lib = get_db_connection_lib()
+    placeholders = ",".join("?" * len(playlist))
+    rows = conn_lib.execute(
+        f"SELECT song_id, title, artist, genre, explicit FROM library WHERE song_id IN ({placeholders})",
+        playlist,
+    ).fetchall()
+    conn_lib.close()
+
+    lib_data = {row[0]: row for row in rows}
+    conn = get_db_connection_playlist()
+
+    insert_data = []
+    for sid in playlist:
+        row = lib_data.get(sid)
+        if row:
+            insert_data.append(
+                (
+                    user_id,
+                    row[0],
+                    row[1],
+                    row[2],
+                    row[3],
+                    song_signals.get(sid, "unheard"),
+                    row[4],
+                )
+            )
+
+
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO playlist (username, song_id, title, artist, genre, signal, explicit)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        insert_data,
+    )
+    conn.commit()
+    conn.close()
+
+    print(f"[TuneLog] Append successful for {user_id}")
+    return True
+
+
+
+# COMMENTED OUT SO THAT IT WONT RUN AT START UP, IF IT WORKS IT WILL RESET THE PLAYLIST THEN WHAT IS THE MEANING OF APPEND
+
+
+# def main():
+#     users = get_all_users()
+
+#     for user_id in users:
+#         print(f"[TuneLog] Building playlist for {user_id}...")
+#         scores = score_song(user_id)
+#         unheard, unheard_ratio = get_unheard_songs(scores)
+#         wildcards = get_wildcard_songs(scores, user_id)
+#         playlist, song_signals = build_playlist(
+#             scores,
+#             unheard,
+#             wildcards,
+#             unheard_ratio,
+#             user_id,
+#             explicit_filter="allow_cleaned",
+#         )
+#         push_playlist(playlist, user_id, song_signals)
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    print("in main statment of playlist generation")

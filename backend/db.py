@@ -62,7 +62,8 @@ def init_db_usr():
         CREATE TABLE IF NOT EXISTS user (
             username     TEXT PRIMARY KEY,
             password       TEXT,
-            isAdmin     BOOLEAN
+            isAdmin     BOOLEAN,
+            playlistId  TEXT
             
         )
     """

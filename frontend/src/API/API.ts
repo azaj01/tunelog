@@ -165,8 +165,16 @@ export interface UserProfileResponse {
 }
 
 export interface MonthlyListen {
-  month: string; 
+  month: string;
   count: number;
+}
+
+export interface PlaylistResponse {
+  status: "ok" | "error";
+  message?: string;
+  songs_added?: number; // From regenerate
+  size_requested?: number; // From append
+  reason?: string; // If error
 }
 
 // API Calls
@@ -333,3 +341,41 @@ export async function fetchMonthlyListens(): Promise<MonthlyListen[]> {
   if (!res.ok) throw new Error("Failed to fetch monthly listens");
   return res.json();
 }
+
+export const appendPlaylist = async (
+  username: string,
+  explicitFilter: string = "allow_cleaned",
+  size: number = 50,
+): Promise<PlaylistResponse> => {
+  try {
+    // Build the query string with parameters
+    const params = new URLSearchParams({
+      username,
+      explicit_filter: explicitFilter,
+      size: size.toString(),
+    });
+
+    const response = await fetch(
+      `${BASE_URL}/api/playlist/append?${params.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data: PlaylistResponse = await response.json();
+    return data;
+  } catch (error) {
+    console.error("[API] Append Playlist failed:", error);
+    return {
+      status: "error",
+      reason: error instanceof Error ? error.message : "Unknown network error",
+    };
+  }
+};

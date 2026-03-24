@@ -22,6 +22,7 @@ from playlist import (
     get_wildcard_songs,
     build_playlist,
     push_playlist,
+    appendPlaylist
 )
 
 # from library import isSyncing, progress, auto_sync, toggle_itune , startSyncSong
@@ -494,12 +495,47 @@ def generatePlaylist(
         return {"status": "error", "reason": str(e)}
 
 
+@app.get("/api/playlist/append")
+def appendPlaylist_api(
+    username: str, explicit_filter: str = "allow_cleaned", size: int = 50
+):
+
+    print("in appened mode")
+    try:
+        
+        conn = get_db_connection_usr()
+        row = conn.execute(
+            "SELECT password FROM user WHERE username = ?", (username,)
+        ).fetchone()
+        conn.close()
+
+        if not row:
+            return {"status": "error", "reason": "User not found in TuneLog database"}
+
+        password = row[0]
+
+        success = appendPlaylist(
+            username,
+            password,
+            explicit_filter,
+            size,
+        )
+
+        if success:
+            return {
+                "status": "ok",
+                "message": f"Successfully appended songs for {username}",
+                "size_requested": size,
+            }
+        else:
+            return {"status": "error", "reason": "Failed to append to Navidrome"}
+
+    except Exception as e:
+        return {"status": "error", "reason": str(e)}
+
+
 @app.get("/api/user/profile")
 def getUserProfile(username: str, password: str):
-    """
-    Returns full profile data for a user.
-    listens table uses: user_id, timestamp (not username, listened_at)
-    """
 
     conn_listen = get_db_connection() 
     conn_library = get_db_connection_lib() 
