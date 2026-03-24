@@ -37,6 +37,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        #    "*"   use only if u want to access this with other devices, ig., mobile
     ],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -255,19 +256,6 @@ def createUser(data: CreateUserData):
         }
 
 
-# @app.post("/admin/get-users")
-# def getUsers(data: AdminAuth):
-#     token = getJWT(data.admin, data.adminPD)
-
-#     if not token:
-#         return {"status": "failed", "reason": "Invalid admin credentials"}
-
-#     conn = get_db_connection_usr()
-#     users = conn.execute("SELECT * FROM user").fetchall()
-#     conn.close()
-
-
-#     return {"status": "ok", "users": [dict(row) for row in users]}
 @app.post("/admin/get-users")
 def getUsers(data: AdminAuth):
     token = getJWT(data.admin, data.adminPD)
@@ -305,7 +293,13 @@ def getUsers(data: AdminAuth):
 #     "email": ""
 # }
 
+
 # print(createUser(data))
+@app.get("/api/sync/stop")
+def stopSync():
+    library._stopSync = True
+    print("stopping request recived")
+    return {"status": "ok", "response": "stopped syncing"}
 
 
 @app.get("/api/sync/status")

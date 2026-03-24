@@ -9,6 +9,7 @@ import {
   fetchSyncStart,
   fetchSyncSettings,
   SyncStatus,
+  fetchSyncStop
 } from "../API/API";
 
 const SYNC_HOURS = Array.from({ length: 24 }, (_, i) => {
@@ -38,6 +39,14 @@ export default function LibrarySync() {
       return;
     }
   }, []);
+
+
+  const stopSyncing = () => {
+    fetchSyncStop()
+  }
+
+
+
 
   const calcExpectedTime = () => {
     if (!syncData) return "—";
@@ -219,12 +228,6 @@ export default function LibrarySync() {
               valueStyle: "text-gray-400",
               dot: "bg-gray-400",
             },
-            // {
-            //   label: "Pending iTunes",
-            //   value: syncData?.explicit_counts?.pending ?? "—",
-            //   valueStyle: "text-blue-400",
-            //   dot: "bg-blue-400",
-            // },
           ].map((item) => (
             <div
               key={item.label}
@@ -291,10 +294,29 @@ export default function LibrarySync() {
             <div className="text-xs text-gray-400 -mt-1 ml-1">
               Fetches explicit tags via iTunes API — expected ~35 min
             </div>
+
+            {(isSyncing || waitingForSync) && (
+              <div className="pt-1">
+                <hr className="border-gray-200 dark:border-gray-800 mb-3" />
+                <Button
+                  size="sm"
+                  variant="primary"
+                  className="w-full !bg-red-500/10 !text-red-400 !shadow-none border border-red-500/40 hover:!bg-red-500/20"
+                  onClick={stopSyncing}
+                 
+                >
+                ⏹ Stop Sync
+                </Button>
+                <div className="text-xs text-gray-400 mt-1.5 ml-1">
+                  Stops the sync after the current batch completes.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ── Settings Panel ── */}
+
+        
         <div className="col-span-12 xl:col-span-5 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
           <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-6">
             Sync Settings

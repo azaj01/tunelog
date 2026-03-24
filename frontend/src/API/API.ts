@@ -117,6 +117,11 @@ export interface PlaylistGenerateResponse {
   reason?: string;
 }
 
+export interface SyncStopResponse {
+  status: string;
+  response: string;
+}
+
 // API Calls
 
 export async function fetchPing(): Promise<{ status: string }> {
@@ -186,7 +191,7 @@ export async function fetchGetUsers(
 ): Promise<GetUsersResponse> {
   // return cached users immediately while fetching
   const cached = localStorage.getItem(USERS_CACHE_KEY);
-  console.log("In fetchgetuser cached : ",cached)
+  console.log("In fetchgetuser cached : ", cached);
   const cachedUsers: User[] = cached ? JSON.parse(cached) : [];
 
   const fetchPromise = fetch(`${BASE_URL}/admin/get-users`, {
@@ -237,5 +242,11 @@ export async function fetchPlaylistGenerate(
     `${BASE_URL}/api/playlist/generate?username=${username}&explicit_filter=${explicit_filter}&size=${size}`,
   );
   if (!res.ok) throw new Error("Failed to generate playlist");
+  return res.json();
+}
+
+export async function fetchSyncStop(): Promise<SyncStopResponse> {
+  const res = await fetch(`${BASE_URL}/api/sync/stop`);
+  if (!res.ok) throw new Error("Failed to stop sync");
   return res.json();
 }

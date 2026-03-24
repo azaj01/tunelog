@@ -240,7 +240,6 @@ def log_history(song):
     conn.close()
 
 
-# main function
 
 if __name__ == "__main__":
     # Database
@@ -269,16 +268,14 @@ if __name__ == "__main__":
     watcherThread.start()
 
     n = 0
-    last_auto_sync_day = None  # track last day auto sync ran
+    last_auto_sync_day = None 
 
     while True:
-        # --- SYNC NOW check ---
         if library._startSyncSong and not library._isSyncing:
             print("[TuneLog] Manual sync triggered from UI...")
             syncThread = threading.Thread(target=library.sync_library, daemon=True)
             syncThread.start()
 
-        # --- AUTO SYNC check ---
         now = datetime.now()
         current_hour = now.hour
         current_day = now.date()
@@ -295,11 +292,10 @@ if __name__ == "__main__":
             syncThread = threading.Thread(target=library.sync_library, daemon=True)
             syncThread.start()
 
-        # --- WATCHER event ---
         try:
             event = event_queue.get(
                 timeout=2
-            )  # wait 30s max, then loop back to check sync
+            )  
             print("in while loop : ", event)
             if event == "nowPlaying":
                 n += 1

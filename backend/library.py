@@ -46,6 +46,7 @@ _toggle_itune = False
 _startSyncSong = False
 _isSyncing = False
 _progress = 0
+_stopSync = False
 
 
 def setSyncSettings(auto_sync=2, itunes=False):
@@ -205,7 +206,7 @@ def remove_deleted_songs(navidrome_ids: set):
 
 
 def sync_library():
-    global _isSyncing, _progress, _startSyncSong
+    global _isSyncing, _progress, _startSyncSong , _stopSync
 
     _isSyncing = True
     _startSyncSong = False
@@ -341,6 +342,12 @@ def sync_library():
         if (i + 1) % 5 == 0:
             conn.commit()
             print(f"[SYNC] Committed at {i + 1} songs")
+            if _stopSync == False:
+                continue
+            else:
+                print("Stopped syncing")
+                break
+            
 
     conn.commit()
     conn.close()
