@@ -20,6 +20,8 @@ The core logic — signal system, scoring formula, genre injection, playlist slo
 
 - Give users option to choose the amount of signal they want in the playlist by how much, right now its hardcoded but it can be added, but the playlist.py will change a lot, there is so many edge cases to handle in for that option, what if the amount of singal is less then why users wants, but it will a good feature to have, - for future
 
+- Improve the genre injection by using a dynamic multiplier, for songs that are listened more it will have more multiplier, this will replace hardcoded GENERE_ALIESE, for users not myself, i listen to bollywood so I can hardcode it but for more users, hardcoding thousands of it is useless 
+
 ## ISSUES :
 - Doing fast sync only added half of the songs from playlist , do fast sync multiple times to get all songs, same for slow sync
 - if making playlist for the 1st time, and havent slow sync even once, check the All option from exicilpt filter
