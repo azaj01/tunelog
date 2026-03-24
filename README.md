@@ -22,6 +22,10 @@ The core logic — signal system, scoring formula, genre injection, playlist slo
 
 ## ISSUES :
 - Doing fast sync only added half of the songs from playlist , do fast sync multiple times to get all songs, same for slow sync
+- if making playlist for the 1st time, and havent slow sync even once, check the All option from exicilpt filter
+- For some reasons, the no. of songs after appending is not right in ui, its all correct in the navidrome
+- I havent cleaned up the og code of ui so in some cases you will see tailwind, ig., in using ui in phone
+- IF YOU RAN IT BY DOCKER DO NOT RAN WITH MANUAL (`python main.py`) , DOCKER MARKS THE DATA FILE AS ITS ROOT AND python WILL NOT BE ABLE TO WRITE IN IT
 
 ## How It Works
 TuneLog watches your Navidrome listening activity in the background. It tracks whether you skip, finish, or replay songs, and uses that behavior to build personalised playlists automatically — one per user.
