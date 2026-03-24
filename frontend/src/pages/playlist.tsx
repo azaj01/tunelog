@@ -220,7 +220,7 @@ useEffect(() => {
       <PageBreadcrumb pageTitle="Playlist" />
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
-        {/* ── Stats Row ── */}
+        
         <div className="col-span-12 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
             {
@@ -248,7 +248,6 @@ useEffect(() => {
           ))}
         </div>
 
-        {/* ── Generate Panel ── */}
         <div className="col-span-12 xl:col-span-7 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
           <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-1">
             Generate Playlist
@@ -257,7 +256,6 @@ useEffect(() => {
             Scores your library and pushes a personalised playlist to Navidrome.
           </p>
 
-          {/* User selector */}
           <div className="mb-5">
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               User
@@ -275,7 +273,6 @@ useEffect(() => {
             </select>
           </div>
 
-          {/* Playlist size slider */}
           <div className="mb-5">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -300,7 +297,6 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Mode toggle */}
           <div className="mb-6">
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Mode
@@ -345,14 +341,12 @@ useEffect(() => {
           )}
         </div>
 
-        {/* ── Settings Panel ── */}
         <div className="col-span-12 xl:col-span-5 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
           <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-6">
             Playlist Settings
           </h4>
 
           <div className="space-y-6">
-            {/* Explicit filter — affects generation */}
             <div>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Explicit Filter
@@ -411,7 +405,6 @@ useEffect(() => {
 
             <hr className="border-gray-200 dark:border-gray-800" />
 
-            {/* Display filter — affects table only */}
             <div>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Show in Table
@@ -471,7 +464,6 @@ useEffect(() => {
 
             <hr className="border-gray-200 dark:border-gray-800" />
 
-            {/* Genre injection */}
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -490,7 +482,6 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* ── Song Table ── */}
         <div className="col-span-12 rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
             <div>

@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router";
 import SignIn from "./pages/AuthPages/SignIn";
 import SignUp from "./pages/AuthPages/SignUp";
 import NotFound from "./pages/OtherPage/NotFound";
-import UserProfiles from "./pages/UserProfiles";
+import UserProfiles from "./pages/users";
 import Videos from "./pages/UiElements/Videos";
 import Images from "./pages/UiElements/Images";
 import Alerts from "./pages/UiElements/Alerts";
@@ -19,6 +19,7 @@ import AppLayout from "./layout/AppLayout";
 import Playlist from "./pages/playlist";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
+import UserProfilePage from "./pages/userProfile";
 
 export default function App() {
   return (
@@ -31,10 +32,11 @@ export default function App() {
             <Route index path="/" element={<Home />} />
 
             {/* Others Page */}
-            <Route path="/profile" element={<UserProfiles />} />
+            <Route path="/user" element={<UserProfiles />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/librarySync" element={<LibrarySync />} />
             <Route path="/playlist" element={<Playlist />} />
+            <Route path="/users/:username" element={<UserProfilePage />} />
 
             {/* Forms */}
             <Route path="/form-elements" element={<FormElements />} />

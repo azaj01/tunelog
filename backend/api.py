@@ -41,6 +41,7 @@ app.add_middleware(
     ],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 
@@ -281,6 +282,62 @@ def getUsers(data: AdminAuth):
     }
 
 
+# const PLACEHOLDER_STATS = {
+#   totalListens: 103,
+#   skips: 133,
+#   repeat: 44,
+#   complete: 89,
+#   partial: 57,
+#   lastLogged: "Mar 12, 2025",
+# };
+
+
+@app.get("/admin/getUserData")
+def getUserData(username: str = "", password: str = ""):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if username != "" and password != "":
+        rows = cursor.execute(
+            """
+        SELECT signal, COUNT(signal) 
+        FROM listens 
+        WHERE user_id = ? 
+        GROUP BY signal;
+
+            """, (username,)
+        ).fetchall()
+
+        stats_map = {row[0]: row[1] for row in rows}
+
+        lastTimeStamp = cursor.execute(
+            """
+            SELECT timestamp 
+            FROM listens 
+            WHERE user_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT 1
+        """,
+            (username,),
+        ).fetchone()
+        last_log = lastTimeStamp[0] if lastTimeStamp else "never"
+
+        total_listens = sum(stats_map.values())
+
+        return {
+            "status": "ok",
+            "totalListens": total_listens,
+            "skips": stats_map.get("skip", 0),
+            "repeat": stats_map.get("repeat", 0),
+            "complete": stats_map.get("positive", 0),
+            "partial": stats_map.get("partial", 0),
+            "lastLogged": last_log,
+        }
+    else:
+        return {
+            "status" : "failed , username required"
+        }
+
+
 # http://your-server/rest/ping.view?u=joe&t=26719a1196d2a940705a59634eb18eab&s=c19b2d&v=1.12.0&c=myapp
 
 
@@ -435,6 +492,177 @@ def generatePlaylist(
 
     except Exception as e:
         return {"status": "error", "reason": str(e)}
+
+
+@app.get("/api/user/profile")
+def getUserProfile(username: str, password: str):
+    """
+    Returns full profile data for a user.
+    listens table uses: user_id, timestamp (not username, listened_at)
+    """
+
+    conn_listen = get_db_connection() 
+    conn_library = get_db_connection_lib() 
+
+    lc = conn_listen.cursor()
+    lib = conn_library.cursor()
+
+    counts = lc.execute(
+        """
+        SELECT signal, COUNT(*) as cnt
+        FROM listens
+        WHERE user_id = ?
+        GROUP BY signal
+    """,
+        (username,),
+    ).fetchall()
+
+    signal_map = {row[0]: row[1] for row in counts}
+    total = sum(signal_map.values())
+
+
+    last = lc.execute(
+        """
+        SELECT timestamp FROM listens
+        WHERE user_id = ?
+        ORDER BY timestamp DESC LIMIT 1
+    """,
+        (username,),
+    ).fetchone()
+
+
+
+    top_songs_raw = lc.execute(
+        """
+        SELECT song_id, COUNT(*) as cnt
+        FROM listens
+        WHERE user_id = ?
+        GROUP BY song_id
+        ORDER BY cnt DESC
+        LIMIT 20
+    """,
+        (username,),
+    ).fetchall()
+
+    top_songs = []
+    for song_id, count in top_songs_raw:
+        meta = lib.execute(
+            "SELECT title, artist FROM library WHERE song_id = ?", (song_id,)
+        ).fetchone()
+        if not meta:
+            continue
+        sig_row = lc.execute(
+            """
+            SELECT signal, COUNT(*) as c FROM listens
+            WHERE user_id = ? AND song_id = ?
+            GROUP BY signal ORDER BY c DESC LIMIT 1
+        """,
+            (username, song_id),
+        ).fetchone()
+        top_songs.append(
+            {
+                "title": meta[0],
+                "artist": meta[1],
+                "count": count,
+                "signal": sig_row[0] if sig_row else "positive",
+            }
+        )
+
+
+    top_artists_raw = lc.execute(
+        """
+        SELECT song_id, COUNT(*) as cnt
+        FROM listens
+        WHERE user_id = ?
+        GROUP BY song_id
+    """,
+        (username,),
+    ).fetchall()
+
+    artist_counts: dict = {}
+    for song_id, cnt in top_artists_raw:
+        meta = lib.execute(
+            "SELECT artist FROM library WHERE song_id = ?", (song_id,)
+        ).fetchone()
+        if not meta or not meta[0]:
+            continue
+        primary = meta[0].split(";")[0].strip()
+        artist_counts[primary] = artist_counts.get(primary, 0) + cnt
+
+    top_artists = sorted(
+        [{"artist": a, "count": c} for a, c in artist_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:20]
+
+
+    top_genres_raw = lc.execute(
+        """
+        SELECT song_id, COUNT(*) as cnt
+        FROM listens
+        WHERE user_id = ?
+        GROUP BY song_id
+    """,
+        (username,),
+    ).fetchall()
+
+    genre_counts: dict = {}
+    for song_id, cnt in top_genres_raw:
+        meta = lib.execute(
+            "SELECT genre FROM library WHERE song_id = ?", (song_id,)
+        ).fetchone()
+        if not meta or not meta[0]:
+            continue
+        genre_counts[meta[0]] = genre_counts.get(meta[0], 0) + cnt
+
+    top_genres = sorted(
+        [{"genre": g, "count": c} for g, c in genre_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:15]
+
+    history_raw = lc.execute(
+        """
+        SELECT song_id, signal, timestamp
+        FROM listens
+        WHERE user_id = ?
+        ORDER BY timestamp DESC
+        LIMIT 100
+    """,
+        (username,),
+    ).fetchall()
+
+    recent_history = []
+    for song_id, signal, timestamp in history_raw:
+        meta = lib.execute(
+            "SELECT title, artist, genre FROM library WHERE song_id = ?", (song_id,)
+        ).fetchone()
+        recent_history.append(
+            {
+                "title": meta[0] if meta else "Unknown",
+                "artist": meta[1] if meta else "Unknown",
+                "genre": meta[2] if meta else "—",
+                "signal": signal,
+                "listened_at": timestamp,  
+            }
+        )
+
+    conn_listen.close()
+    conn_library.close()
+
+    return {
+        "status": "ok",
+        "totalListens": total,
+        "skips": signal_map.get("skip", 0),
+        "partial": signal_map.get("partial", 0),
+        "complete": signal_map.get("positive", 0),
+        "repeat": signal_map.get("repeat", 0),
+        "lastLogged": last[0] if last else "never",
+        "topSongs": top_songs,
+        "topArtists": top_artists,
+        "topGenres": top_genres,
+        "recentHistory": recent_history,
+    }
 
 
 if __name__ == "__main__":

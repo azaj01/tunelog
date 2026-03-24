@@ -34,7 +34,6 @@ useEffect(() => {
   if (username && password) {
     fetchLogin({ username, password })
       .then(() => {
-        // after login ensures user is in DB, pre-cache users list
         fetchGetUsers({ admin: username, adminPD: password }).catch(() => {});
       })
       .catch(() => {});
@@ -47,7 +46,7 @@ useEffect(() => {
     <>
       <PageMeta
         title="Dashboard - Tunelog"
-        description="This is React.js Ecommerce Dashboard page for TailAdmin - React.js Tailwind CSS Admin Dashboard Template"
+        description="Dashboard  for tunelog and navidrome"
       />
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <div className="col-span-12 space-y-6 xl:col-span-7">

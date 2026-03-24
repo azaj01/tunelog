@@ -122,6 +122,49 @@ export interface SyncStopResponse {
   response: string;
 }
 
+export interface UserDataResponse {
+  status: "ok" | "failed";
+  totalListens: number;
+  skips: number;
+  repeat: number;
+  complete: number;
+  partial: number;
+  lastLogged: string;
+  reason?: string;
+}
+
+
+export interface UserProfileResponse {
+  status: "ok" | "failed";
+  totalListens: number;
+  skips: number;
+  partial: number;
+  complete: number;
+  repeat: number;
+  lastLogged: string;
+  topSongs: {
+    title: string;
+    artist: string;
+    count: number;
+    signal: string; 
+  }[];
+  topArtists: {
+    artist: string;
+    count: number;
+  }[];
+  topGenres: {
+    genre: string;
+    count: number;
+  }[];
+  recentHistory: {
+    title: string;
+    artist: string;
+    genre: string;
+    signal: string;
+    listened_at: string;
+  }[];
+}
+
 // API Calls
 
 export async function fetchPing(): Promise<{ status: string }> {
@@ -250,3 +293,49 @@ export async function fetchSyncStop(): Promise<SyncStopResponse> {
   if (!res.ok) throw new Error("Failed to stop sync");
   return res.json();
 }
+
+export async function fetchUserData(
+  username: string,
+  password: string,
+): Promise<UserDataResponse> {
+  console.log("fetching user data")
+  console.log("username : " ,username , "password" , password)
+  const query = new URLSearchParams({ username, password }).toString();
+  const res = await fetch(`${BASE_URL}/admin/getUserData?${query}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  const response = res.json()
+  console.log(response)
+
+  if (!res.ok) throw new Error("Failed to fetch user data");
+  return response;
+}
+
+
+
+ 
+export interface UserDataResponse {
+  status: "ok" | "failed";
+  totalListens: number;
+  skips: number;
+  partial: number;
+  complete: number;
+  repeat: number;
+  lastLogged: string;
+}
+
+
+
+export async function fetchUserProfile(
+  username: string,
+  password: string,
+): Promise<UserProfileResponse> {
+  const res = await fetch(
+    `${BASE_URL}/api/user/profile?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+  );
+  if (!res.ok) throw new Error("Failed to fetch user profile");
+  return res.json();
+}
+ 

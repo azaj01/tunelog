@@ -1,5 +1,5 @@
+
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
-import UserMetaCard from "../components/UserProfile/UserMetaCard";
 import PageMeta from "../components/common/PageMeta";
 import { useState, useEffect } from "react";
 import { fetchGetUsers, fetchCreateUser, User } from "../API/API";
@@ -9,6 +9,7 @@ import { useModal } from "../hooks/useModal";
 import Input from "../components/form/input/InputField";
 import Label from "../components/form/Label";
 import Switch from "../components/form/switch/Switch";
+import UserMetaCard from "../components/UserProfile/UserMetaCard";
 
 export default function UserProfiles() {
   const [users, setUsers] = useState<User[]>([]);
@@ -21,12 +22,10 @@ export default function UserProfiles() {
   const [toggleisAdmin, setToggleIsAdmin] = useState(false);
   const [createError, setCreateError] = useState("");
 
-  console.log("in userprofile")
   const getAdminCredentials = () => {
-   const storage = localStorage.getItem("tunelog_user")
-     ? localStorage
-     : sessionStorage;
-     console.log("in storage");
+    const storage = localStorage.getItem("tunelog_user")
+      ? localStorage
+      : sessionStorage;
     return {
       admin: storage.getItem("tunelog_user") ?? "",
       adminPD: storage.getItem("tunelog_password") ?? "",
@@ -34,13 +33,10 @@ export default function UserProfiles() {
   };
 
   const loadUsers = () => {
-    console.log("Load users");
     setLoading(true);
     const { admin, adminPD } = getAdminCredentials();
     fetchGetUsers({ admin, adminPD }).then((data) => {
-      console.log("in userprofile fetch");
       if (data.status === "ok" && data.users) {
-        console.log(data.users)
         setUsers(data.users);
       }
       setLoading(false);
@@ -52,7 +48,6 @@ export default function UserProfiles() {
       setCreateError("All fields are required");
       return;
     }
-     
 
     const { admin, adminPD } = getAdminCredentials();
     fetchCreateUser({
@@ -77,31 +72,50 @@ export default function UserProfiles() {
       }
     });
   };
-   useEffect(() => {
-     console.log("in use effect");
-     loadUsers();
-   }, []);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
   return (
     <>
-      <PageMeta
-        title="Users | TuneLog"
-        description="Users dashboard, helps maintain users, Add, Delete users"
-      />
+      <PageMeta title="Users | TuneLog" description="Manage TuneLog users" />
       <PageBreadcrumb pageTitle="Users" />
+
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
-        <Button variant="outline" className="mx-10" onClick={openModal}>
-          Add user
-        </Button>
-        <Button variant="outline" className="mr-10">
-          Maintain user
-        </Button>
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+              All Users
+            </h4>
+            <p className="text-sm text-gray-400 mt-0.5">
+              {loading
+                ? "Loading..."
+                : `${users.length} user${users.length !== 1 ? "s" : ""} registered`}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={openModal}>
+            + Add User
+          </Button>
+        </div>
 
-        <hr className="mt-5" />
+        <hr className="border-gray-100 dark:border-gray-800 mb-6" />
 
-        <div className="space-y-6 mt-5">
+        {/* User list */}
+        <div className="space-y-4">
           {loading ? (
-            <p className="text-gray-500 dark:text-gray-400">Loading users...</p>
+            // Skeleton loader
+            Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-28 rounded-2xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-white/[0.02] animate-pulse"
+              />
+            ))
+          ) : users.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 text-sm">
+              No users found. Add one to get started.
+            </div>
           ) : (
             users.map((user) => (
               <UserMetaCard key={user.username} user={user} />
@@ -110,11 +124,15 @@ export default function UserProfiles() {
         </div>
       </div>
 
+      {/* Create user modal */}
       <Modal isOpen={isOpen} onClose={closeModal} className="max-w-[700px] m-4">
         <div className="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-11">
-          <h4 className="mb-6 text-2xl font-semibold text-gray-800 dark:text-white/90">
+          <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">
             Create User
           </h4>
+          <p className="text-sm text-gray-400 mb-6">
+            Creates the user in both Navidrome and TuneLog.
+          </p>
 
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
             <div className="col-span-2 lg:col-span-1">
