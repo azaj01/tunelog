@@ -38,6 +38,8 @@ The core logic — signal system, scoring formula, genre injection, playlist slo
 - IF YOU RAN IT BY DOCKER DO NOT RAN WITH MANUAL (`python main.py`) , DOCKER MARKS THE DATA FILE AS ITS ROOT AND python WILL NOT BE ABLE TO WRITE IN IT
 
 - There is a chance that it will crash if there is no song data in song list you try to do custom playlist generation like skip : 0 and repeat : 1 as it will fail as database has no data for song
+- Songs that are deleted from local or is not in navidrome, its get deleted from library database during the sync but not from history database causing unknow table in ui, remove the data from history database too
+
 
 
 ## How It Works
