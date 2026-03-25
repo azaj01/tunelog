@@ -18,7 +18,7 @@ The core logic — signal system, scoring formula, genre injection, playlist slo
   currently in my songlist db in excilipt col there is notinitunes in some song, thats becuase some of the songs has noisy title ig : DJ Alok Main aur tu remix, these makes itunes to return wrong info
   My idea is to make api requests to itunes in trail and error, try dj alok, try alok main  , try mai or tu, and use fuzzy module to get the closest to the reposne and use that, this will take time so make it automatic at a specify time i.g, 1 Am
 
-- Give users option to choose the amount of signal they want in the playlist by how much, right now its hardcoded but it can be added, but the playlist.py will change a lot, there is so many edge cases to handle in for that option, what if the amount of singal is less then why users wants, but it will a good feature to have, - for future
+- Give users option to choose the amount of signal they want in the playlist by how much, right now its hardcoded but it can be added, but the playlist.py will change a lot, there is so many edge cases to handle in for that option, what if the amount of singal is less then why users wants, but it will a good feature to have, ---> DONE
 
 - Improve the genre injection by using a dynamic multiplier, for songs that are listened more it will have more multiplier, this will replace hardcoded GENERE_ALIESE, for users not myself, i listen to bollywood so I can hardcode it but for more users, hardcoding thousands of it is useless 
 
