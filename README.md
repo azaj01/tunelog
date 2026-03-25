@@ -26,7 +26,11 @@ The core logic — signal system, scoring formula, genre injection, playlist slo
 
 - Use stars to import in database, if user have already started some song then use it to import in the database to remove cold start problem
 
+- Add, "Add to database only" option in user adding menu
+
+
 ## ISSUES :
+- Currently i havent how well this project work with Symfonium app, as it uses caching and i need live data of skips to work, other options works well(I think) - if you know let me know 
 - Doing fast sync only added half of the songs from playlist , do fast sync multiple times to get all songs, same for slow sync
 - if making playlist for the 1st time, and havent slow sync even once, check the All option from exicilpt filter
 - For some reasons, the no. of songs after appending is not right in ui, its all correct in the navidrome

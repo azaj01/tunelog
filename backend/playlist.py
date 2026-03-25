@@ -319,7 +319,7 @@ def build_playlist(
 
     allowed_ids = get_allowed_song_ids(explicit_filter)
 
-    unheard_pct = min(0.35, unheard_ratio)
+    unheard_pct = min(0.35, unheard_ratio)      # make this 0 if user dont want random song
     wildcard_pct = 0.08
     remaining = 1 - unheard_pct - wildcard_pct
 
