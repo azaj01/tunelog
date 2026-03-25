@@ -10,7 +10,7 @@ import {
   PlaylistSong,
   PlaylistStats,
   fetchLogin,
-  appendPlaylist
+  appendPlaylist,
 } from "../API/API";
 import { useNavigate } from "react-router";
 
@@ -18,11 +18,73 @@ type ExplicitFilter = "strict" | "allow_cleaned" | "all";
 type SortKey = "artist" | "genre" | "signal";
 type SyncMode = "regenerate" | "append";
 
+interface SlotValues {
+  positive: number;
+  repeat: number;
+  partial: number;
+  skip: number;
+  [key: string]: number;
+}
+
+interface WeightValues {
+  repeat: number;
+  positive: number;
+  partial: number;
+  skip: number;
+  [key: string]: number;
+}
+
+interface Preset {
+  id: string;
+  label: string;
+  desc: string;
+  slots: SlotValues;
+  weights: WeightValues;
+}
+
+const SIGNAL_ORDER: (keyof SlotValues)[] = [
+  "positive",
+  "repeat",
+  "partial",
+  "skip",
+];
+
+const PRESETS: Preset[] = [
+  {
+    id: "balanced",
+    label: "Balanced",
+    desc: "Default mix — equal weight on liked and unheard",
+    slots: { positive: 0.35, repeat: 0.35, partial: 0.2, skip: 0.1 },
+    weights: { repeat: 3, positive: 2, partial: 1, skip: -2 },
+  },
+  {
+    id: "discovery",
+    label: "Discovery",
+    desc: "More unheard songs, fewer repeats",
+    slots: { positive: 0.25, repeat: 0.15, partial: 0.35, skip: 0.25 },
+    weights: { repeat: 2, positive: 2, partial: 2, skip: -1 },
+  },
+  {
+    id: "favorites",
+    label: "Favourites",
+    desc: "Heavy on repeats and positives — your best songs",
+    slots: { positive: 0.45, repeat: 0.45, partial: 0.08, skip: 0.02 },
+    weights: { repeat: 5, positive: 3, partial: 1, skip: -3 },
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    desc: "Set your own slot ratios and signal weights",
+    slots: { positive: 0.35, repeat: 0.35, partial: 0.2, skip: 0.1 },
+    weights: { repeat: 3, positive: 2, partial: 1, skip: -2 },
+  },
+];
+
 const SIGNAL_STYLE: Record<string, string> = {
-  repeat:
-    "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
   positive:
     "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  repeat:
+    "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
   partial:
     "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
   skip: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
@@ -45,6 +107,13 @@ const EXPLICIT_LABEL: Record<string, string> = {
   notInItunes: "?",
 };
 
+const SLOT_COLORS: Record<string, string> = {
+  positive: "bg-green-400",
+  repeat: "bg-purple-400",
+  partial: "bg-yellow-400",
+  skip: "bg-red-400",
+};
+
 const formatLastGenerated = (raw: string | null) => {
   if (!raw) return "Never";
   const date = new Date(raw.replace(" ", "T") + "Z");
@@ -55,6 +124,62 @@ const formatLastGenerated = (raw: string | null) => {
     minute: "2-digit",
   });
 };
+
+function SlotBar({ slots }: { slots: SlotValues }) {
+  const entries = Object.entries(slots) as [keyof SlotValues, number][];
+  return (
+    <div className="flex rounded-lg overflow-hidden h-3 w-full mt-2">
+      {entries.map(([key, val]) => (
+        <div
+          key={key}
+          className={`${SLOT_COLORS[key]} transition-all duration-300`}
+          style={{ width: `${val * 100}%` }}
+          title={`${key}: ${Math.round(val * 100)}%`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  color,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  color: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className={`w-16 text-xs font-medium ${color} flex-shrink-0 capitalize`}
+      >
+        {label}
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="flex-1 accent-brand-500 h-1.5"
+      />
+      <span className="w-10 text-xs text-gray-400 text-right flex-shrink-0">
+        {step < 1 ? `${Math.round(value * 100)}%` : value}
+      </span>
+    </div>
+  );
+}
 
 export default function Playlist() {
   const [users, setUsers] = useState<string[]>([]);
@@ -71,56 +196,68 @@ export default function Playlist() {
   const [songs, setSongs] = useState<PlaylistSong[]>([]);
   const [stats, setStats] = useState<PlaylistStats | null>(null);
   const [loadingSongs, setLoadingSongs] = useState(false);
-
   const [showExplicit, setShowExplicit] = useState(true);
   const [showCleaned, setShowCleaned] = useState(true);
   const [showClean, setShowClean] = useState(true);
 
+  const [selectedPreset, setSelectedPreset] = useState<string>("balanced");
+  const [customSlots, setCustomSlots] = useState<SlotValues>(PRESETS[3].slots);
+  const [customWeights, setCustomWeights] = useState<WeightValues>(
+    PRESETS[3].weights,
+  );
+
   const navigate = useNavigate();
+
+  const activeSlots =
+    selectedPreset === "custom"
+      ? customSlots
+      : PRESETS.find((p) => p.id === selectedPreset)!.slots;
+  const activeWeights =
+    selectedPreset === "custom"
+      ? customWeights
+      : PRESETS.find((p) => p.id === selectedPreset)!.weights;
+
+  const normaliseSlots = (updated: SlotValues): SlotValues => {
+    const total = Object.values(updated).reduce((a, b) => a + b, 0);
+    if (total === 0) return updated;
+    return {
+      positive: updated.positive / total,
+      repeat: updated.repeat / total,
+      partial: updated.partial / total,
+      skip: updated.skip / total,
+    };
+  };
 
   useEffect(() => {
     const token =
       localStorage.getItem("tunelog_token") ||
       sessionStorage.getItem("tunelog_token");
-
     if (!token) {
       navigate("/signin");
       return;
     }
-  }, []);
 
-useEffect(() => {
-  const token =
-    localStorage.getItem("tunelog_token") ||
-    sessionStorage.getItem("tunelog_token");
+    const admin =
+      localStorage.getItem("tunelog_user") ??
+      sessionStorage.getItem("tunelog_user") ??
+      "";
+    const adminPD =
+      localStorage.getItem("tunelog_password") ??
+      sessionStorage.getItem("tunelog_password") ??
+      "";
 
-  if (!token) {
-    navigate("/signin");
-    return;
-  }
-
-  const admin =
-    localStorage.getItem("tunelog_user") ??
-    sessionStorage.getItem("tunelog_user") ??
-    "";
-  const adminPD =
-    localStorage.getItem("tunelog_password") ??
-    sessionStorage.getItem("tunelog_password") ??
-    "";
-
-  // re-login first to ensure user is in DB, then fetch users
-  fetchLogin({ username: admin, password: adminPD })
-    .catch(() => {})
-    .finally(() => {
-      fetchGetUsers({ admin, adminPD }).then((res) => {
-        if (res.status === "ok" && res.users) {
-          const usernames = res.users.map((u) => u.username);
-          setUsers(usernames);
-          if (usernames.length > 0) setSelectedUser(usernames[0]);
-        }
+    fetchLogin({ username: admin, password: adminPD })
+      .catch(() => {})
+      .finally(() => {
+        fetchGetUsers({ admin, adminPD }).then((res) => {
+          if (res.status === "ok" && res.users) {
+            const usernames = res.users.map((u) => u.username);
+            setUsers(usernames);
+            if (usernames.length > 0) setSelectedUser(usernames[0]);
+          }
+        });
       });
-    });
-}, []);
+  }, []);
 
   useEffect(() => {
     if (!selectedUser) return;
@@ -140,25 +277,27 @@ useEffect(() => {
     setIsGenerating(true);
     setGenerateMsg("");
     try {
-      let res : any ;
-      if (syncMode == "regenerate") {
+      const res =
+        syncMode === "regenerate"
+          ? await fetchPlaylistGenerate(
+              selectedUser,
+              explicitFilter,
+              playlistSize,
+              activeSlots,
+              activeWeights,
+            )
+          : await appendPlaylist(
+              selectedUser,
+              explicitFilter,
+              playlistSize,
+              activeSlots,
+              activeWeights,
+            );
 
-        res = await fetchPlaylistGenerate(
-          selectedUser,
-          explicitFilter,
-          playlistSize,
-        );
-      }
-      else {
-
-        res = await appendPlaylist(
-          selectedUser,
-          explicitFilter,
-          playlistSize,
-        );
-      }
       if (res.status === "ok") {
-        setGenerateMsg(`✓ Done — ${res.songs_added} songs`);
+        setGenerateMsg(
+          `✓ Done — ${res.songs_added ?? res.size_requested} songs`,
+        );
         const updated = await fetchPlaylistSongs(selectedUser);
         if (updated.status === "ok") {
           setSongs(updated.songs);
@@ -233,7 +372,7 @@ useEffect(() => {
       <PageBreadcrumb pageTitle="Playlist" />
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
-        
+        {/* ── Stats row ── */}
         <div className="col-span-12 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
             {
@@ -259,6 +398,201 @@ useEffect(() => {
               </p>
             </div>
           ))}
+        </div>
+        <div className="col-span-12 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+          <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-1">
+            Playlist Profile
+          </h4>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            Controls how slots are split across signals and how signals are
+            scored.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 mb-6">
+            {PRESETS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setSelectedPreset(p.id)}
+                className={`rounded-xl border p-4 text-left transition-colors ${
+                  selectedPreset === p.id
+                    ? "border-brand-500 bg-brand-500/10"
+                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                }`}
+              >
+                <p
+                  className={`text-sm font-semibold mb-0.5 ${selectedPreset === p.id ? "text-brand-500" : "text-gray-800 dark:text-white/90"}`}
+                >
+                  {p.label}
+                </p>
+                <p className="text-xs text-gray-400 leading-tight">{p.desc}</p>
+                <SlotBar
+                  slots={
+                    p.id === "custom" && selectedPreset === "custom"
+                      ? customSlots
+                      : p.slots
+                  }
+                />
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+              <p className="text-sm font-semibold text-gray-700 dark:text-white/80 mb-1">
+                Slot Ratios
+              </p>
+              <p className="text-xs text-gray-400 mb-4">
+                How the playlist slots are distributed across signal types.
+              </p>
+
+              {selectedPreset === "custom" ? (
+                <div className="space-y-3">
+                  {(Object.keys(customSlots) as (keyof SlotValues)[]).map(
+                    (key) => (
+                      <SliderRow
+                        key={key}
+                        label={key as string}
+                        value={customSlots[key]}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        color={
+                          key === "positive"
+                            ? "text-green-400"
+                            : key === "repeat"
+                              ? "text-purple-400"
+                              : key === "partial"
+                                ? "text-yellow-400"
+                                : "text-red-400"
+                        }
+                        onChange={(v) =>
+                          setCustomSlots((prev) =>
+                            normaliseSlots({ ...prev, [key]: v }),
+                          )
+                        }
+                      />
+                    ),
+                  )}
+                  <SlotBar slots={customSlots} />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    {(Object.entries(customSlots) as [string, number][]).map(
+                      ([k, v]) => (
+                        <span key={k} className="capitalize">
+                          {k}: {Math.round(v * 100)}%
+                        </span>
+                      ),
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(Object.entries(activeSlots) as [string, number][]).map(
+                    ([key, val]) => (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between"
+                      >
+                        <span className="text-xs text-gray-600 dark:text-gray-400 capitalize w-16">
+                          {key}
+                        </span>
+                        <div className="flex-1 mx-3 bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-1.5 rounded-full ${SLOT_COLORS[key]}`}
+                            style={{ width: `${val * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-400 w-8 text-right">
+                          {Math.round(val * 100)}%
+                        </span>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+              <p className="text-sm font-semibold text-gray-700 dark:text-white/80 mb-1">
+                Signal Weights
+              </p>
+              <p className="text-xs text-gray-400 mb-4">
+                How much each signal contributes to a song's score.
+              </p>
+
+              {selectedPreset === "custom" ? (
+                <div className="space-y-3">
+                  {SIGNAL_ORDER.map((key) => (
+                    <SliderRow
+                      key={key}
+                      label={key as string}
+                      value={customWeights[key]}
+                      min={-5}
+                      max={5}
+                      step={1}
+                      color={
+                        key === "positive"
+                          ? "text-green-400"
+                          : key === "repeat"
+                            ? "text-purple-400"
+                            : key === "partial"
+                              ? "text-yellow-400"
+                              : "text-red-400"
+                      }
+                      onChange={(v) =>
+                        setCustomWeights((prev) => ({ ...prev, [key]: v }))
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {SIGNAL_ORDER.map((key) => {
+                    const val = activeWeights[key];
+
+                    return (
+                      <div key={key} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-600 dark:text-gray-400 capitalize w-16">
+                          {key}
+                        </span>
+
+                        <div className="flex-1 flex items-center">
+                          <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-l-full h-1.5 overflow-hidden flex justify-end">
+                            {val < 0 && (
+                              <div
+                                className="bg-red-400 h-1.5 rounded-l-full"
+                                style={{
+                                  width: `${(Math.abs(val) / 5) * 100}%`,
+                                }}
+                              />
+                            )}
+                          </div>
+
+                          <div className="w-px h-3 bg-gray-300 dark:bg-gray-600" />
+
+                          <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-r-full h-1.5 overflow-hidden">
+                            {val > 0 && (
+                              <div
+                                className={`${SLOT_COLORS[key]} h-1.5 rounded-r-full`}
+                                style={{ width: `${(val / 5) * 100}%` }}
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-xs w-6 text-right font-medium ${
+                            val < 0 ? "text-red-400" : "text-green-400"
+                          }`}
+                        >
+                          {val > 0 ? `+${val}` : val}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="col-span-12 xl:col-span-7 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
@@ -358,7 +692,6 @@ useEffect(() => {
           <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-6">
             Playlist Settings
           </h4>
-
           <div className="space-y-6">
             <div>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -423,8 +756,7 @@ useEffect(() => {
                 Show in Table
               </p>
               <p className="text-xs text-gray-400 mb-3">
-                Filter what's visible in the song list. Does not affect
-                generation.
+                Filter visible songs. Does not affect generation.
               </p>
               <div className="flex flex-col gap-3">
                 {[

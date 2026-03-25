@@ -22,6 +22,10 @@ The core logic — signal system, scoring formula, genre injection, playlist slo
 
 - Improve the genre injection by using a dynamic multiplier, for songs that are listened more it will have more multiplier, this will replace hardcoded GENERE_ALIESE, for users not myself, i listen to bollywood so I can hardcode it but for more users, hardcoding thousands of it is useless 
 
+- Use pre existing notication of the ui to show the notification of which user is playing which song, when song change send data to frontend and then use that to show notification.
+
+- Use stars to import in database, if user have already started some song then use it to import in the database to remove cold start problem
+
 ## ISSUES :
 - Doing fast sync only added half of the songs from playlist , do fast sync multiple times to get all songs, same for slow sync
 - if making playlist for the 1st time, and havent slow sync even once, check the All option from exicilpt filter

@@ -1,6 +1,5 @@
 const BASE_URL = import.meta.env.VITE_API_URL;
 
-// types
 
 export interface Stats {
   total_songs: number;
@@ -44,6 +43,11 @@ export interface SyncStartResponse {
 
 export interface SyncSettingResponse {
   status: "ok";
+}
+
+export interface SyncStopResponse {
+  status: string;
+  response: string;
 }
 
 export interface LoginRequest {
@@ -90,38 +94,6 @@ export interface GetUsersResponse {
   reason?: string;
 }
 
-export interface PlaylistSong {
-  song_id: string;
-  title: string;
-  artist: string;
-  genre: string;
-  signal: string;
-  explicit: string;
-}
-
-export interface PlaylistStats {
-  last_generated: string;
-  total_songs: number;
-  top_genre: string;
-}
-
-export interface PlaylistSongsResponse {
-  status: string;
-  stats: PlaylistStats;
-  songs: PlaylistSong[];
-}
-
-export interface PlaylistGenerateResponse {
-  status: string;
-  songs_added?: number;
-  reason?: string;
-}
-
-export interface SyncStopResponse {
-  status: string;
-  response: string;
-}
-
 export interface UserDataResponse {
   status: "ok" | "failed";
   totalListens: number;
@@ -164,20 +136,42 @@ export interface UserProfileResponse {
   }[];
 }
 
+export interface PlaylistSong {
+  song_id: string;
+  title: string;
+  artist: string;
+  genre: string;
+  signal: string;
+  explicit: string;
+}
+
+export interface PlaylistStats {
+  last_generated: string;
+  total_songs: number;
+  top_genre: string;
+}
+
+export interface PlaylistSongsResponse {
+  status: string;
+  stats: PlaylistStats;
+  songs: PlaylistSong[];
+}
+
+
+
+export interface PlaylistGenerateResponse {
+  status: "ok" | "error";
+  songs_added?: number;
+  size_requested?: number;
+  message?: string;
+  reason?: string;
+}
+
 export interface MonthlyListen {
   month: string;
   count: number;
 }
 
-export interface PlaylistResponse {
-  status: "ok" | "error";
-  message?: string;
-  songs_added?: number; // From regenerate
-  size_requested?: number; // From append
-  reason?: string; // If error
-}
-
-// API Calls
 
 export async function fetchPing(): Promise<{ status: string }> {
   const res = await fetch(`${BASE_URL}/api/ping`);
@@ -204,6 +198,12 @@ export async function fetchSyncStart(
     `${BASE_URL}/api/sync/start?use_itunes=${use_itunes}`,
   );
   if (!res.ok) throw new Error("Failed to start sync");
+  return res.json();
+}
+
+export async function fetchSyncStop(): Promise<SyncStopResponse> {
+  const res = await fetch(`${BASE_URL}/api/sync/stop`);
+  if (!res.ok) throw new Error("Failed to stop sync");
   return res.json();
 }
 
@@ -239,13 +239,13 @@ export async function fetchCreateUser(
   if (!res.ok) throw new Error("Failed to create user");
   return res.json();
 }
+
 const USERS_CACHE_KEY = "tunelog_users_cache";
 
 export async function fetchGetUsers(
   data: AdminAuthRequest,
 ): Promise<GetUsersResponse> {
   const cached = localStorage.getItem(USERS_CACHE_KEY);
-  console.log("In fetchgetuser cached : ", cached);
   const cachedUsers: User[] = cached ? JSON.parse(cached) : [];
 
   const fetchPromise = fetch(`${BASE_URL}/admin/get-users`, {
@@ -274,55 +274,14 @@ export async function fetchGetUsers(
   return fetchPromise;
 }
 
-export async function fetchPlaylistSongs(
-  username: string,
-): Promise<PlaylistSongsResponse> {
-  const res = await fetch(
-    `${BASE_URL}/api/playlist/songs?username=${username}`,
-  );
-  if (!res.ok) throw new Error("Failed to fetch playlist songs");
-  return res.json();
-}
-
-export async function fetchPlaylistGenerate(
-  username: string,
-  explicit_filter: string = "allow_cleaned",
-  size: number = 50,
-): Promise<PlaylistGenerateResponse> {
-  const res = await fetch(
-    `${BASE_URL}/api/playlist/generate?username=${username}&explicit_filter=${explicit_filter}&size=${size}`,
-  );
-  if (!res.ok) throw new Error("Failed to generate playlist");
-  return res.json();
-}
-
-export async function fetchSyncStop(): Promise<SyncStopResponse> {
-  const res = await fetch(`${BASE_URL}/api/sync/stop`);
-  if (!res.ok) throw new Error("Failed to stop sync");
-  return res.json();
-}
-
 export async function fetchUserData(
   username: string,
   password: string,
 ): Promise<UserDataResponse> {
   const query = new URLSearchParams({ username, password }).toString();
   const res = await fetch(`${BASE_URL}/admin/getUserData?${query}`);
-
   if (!res.ok) throw new Error("Failed to fetch user data");
-
-  const data = await res.json();
-  return data;
-}
-
-export interface UserDataResponse {
-  status: "ok" | "failed";
-  totalListens: number;
-  skips: number;
-  partial: number;
-  complete: number;
-  repeat: number;
-  lastLogged: string;
+  return res.json();
 }
 
 export async function fetchUserProfile(
@@ -336,41 +295,56 @@ export async function fetchUserProfile(
   return res.json();
 }
 
+export async function fetchPlaylistSongs(
+  username: string,
+): Promise<PlaylistSongsResponse> {
+  const res = await fetch(
+    `${BASE_URL}/api/playlist/songs?username=${username}`,
+  );
+  if (!res.ok) throw new Error("Failed to fetch playlist songs");
+  return res.json();
+}
+
 export async function fetchMonthlyListens(): Promise<MonthlyListen[]> {
   const res = await fetch(`${BASE_URL}/api/library/getMonthlyListens`);
   if (!res.ok) throw new Error("Failed to fetch monthly listens");
   return res.json();
 }
 
-export const appendPlaylist = async (
+
+
+
+export async function fetchPlaylistGenerate(
   username: string,
-  explicitFilter: string = "allow_cleaned",
+  explicit_filter: string = "allow_cleaned",
   size: number = 50,
-): Promise<PlaylistResponse> => {
+  slots?: Record<string, number>,
+  weights?: Record<string, number>,
+): Promise<PlaylistGenerateResponse> {
+  const res = await fetch(`${BASE_URL}/api/playlist/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, explicit_filter, size, slots, weights }),
+  });
+  if (!res.ok) throw new Error("Failed to generate playlist");
+  return res.json();
+}
+
+export async function appendPlaylist(
+  username: string,
+  explicit_filter: string = "allow_cleaned",
+  size: number = 50,
+  slots?: Record<string, number>,
+  weights?: Record<string, number>,
+): Promise<PlaylistGenerateResponse> {
   try {
-    // Build the query string with parameters
-    const params = new URLSearchParams({
-      username,
-      explicit_filter: explicitFilter,
-      size: size.toString(),
+    const res = await fetch(`${BASE_URL}/api/playlist/append`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, explicit_filter, size, slots, weights }),
     });
-
-    const response = await fetch(
-      `${BASE_URL}/api/playlist/append?${params.toString()}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data: PlaylistResponse = await response.json();
-    return data;
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
   } catch (error) {
     console.error("[API] Append Playlist failed:", error);
     return {
@@ -378,4 +352,4 @@ export const appendPlaylist = async (
       reason: error instanceof Error ? error.message : "Unknown network error",
     };
   }
-};
+}

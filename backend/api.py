@@ -6,6 +6,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
+from typing import Optional
 from config import Navidrome_url
 
 from db import (
@@ -22,7 +23,9 @@ from playlist import (
     get_wildcard_songs,
     build_playlist,
     push_playlist,
-    appendPlaylist
+    appendPlaylist,
+    songSlots,
+    signalWeights
 )
 
 # from library import isSyncing, progress, auto_sync, toggle_itune , startSyncSong
@@ -72,6 +75,13 @@ class AdminAuth(BaseModel):
     admin: str
     adminPD: str
 
+
+class PlaylistOptions(BaseModel):
+    username: str
+    explicit_filter: str = "allow_cleaned"
+    size: int = 50
+    slots: Optional[dict] = None     
+    weights: Optional[dict] = None   
 
 # ping
 
@@ -473,11 +483,23 @@ def getSongsFromPlaylist(username: str):
     return {"status": "ok", "stats": stats, "songs": songs}
 
 
-@app.get("/api/playlist/generate")
-def generatePlaylist(
-    username: str, explicit_filter: str = "allow_cleaned", size: int = 50
-):
+@app.post("/api/playlist/generate")
+def generatePlaylist(data: PlaylistOptions):
+    username = data.username
+    explicit_filter = data.explicit_filter
+    size = data.size
     try:
+        if data.slots:
+            songSlots(data.slots)
+            print("=== PLAYLIST CONFIG ===")
+            print("slots:", data.slots)
+
+        if data.weights:
+            signalWeights(data.weights)
+            # print ("generated playlist for signal weights : " , data .weights)
+            print("weights:", data.weights)
+            print("=======================")
+
         scores = score_song(username)
         unheard, unheard_ratio = get_unheard_songs(scores)
         wildcards = get_wildcard_songs(scores, username)
@@ -495,14 +517,27 @@ def generatePlaylist(
         return {"status": "error", "reason": str(e)}
 
 
-@app.get("/api/playlist/append")
+@app.post("/api/playlist/append")
 def appendPlaylist_api(
-    username: str, explicit_filter: str = "allow_cleaned", size: int = 50
+    data: PlaylistOptions
 ):
-
     print("in appened mode")
+    username = data.username
+    explicit_filter = data.explicit_filter
+    size = data.size
     try:
-        
+        if data.slots:
+            songSlots(data.slots)
+            # print("generated playlist of slots : " , data.slots)
+            print("=== PLAYLIST CONFIG ===")
+            print("slots:", data.slots)
+
+        if data.weights:
+            signalWeights(data.weights)
+            # print ("generated playlist for signal weights : " , data .weights)
+            print("weights:", data.weights)
+            print("=======================")
+
         conn = get_db_connection_usr()
         row = conn.execute(
             "SELECT password FROM user WHERE username = ?", (username,)
