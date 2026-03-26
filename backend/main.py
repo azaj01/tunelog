@@ -240,7 +240,6 @@ def log_history(song):
     conn.close()
 
 
-
 if __name__ == "__main__":
     # Database
     print("Initializing databse")
@@ -259,7 +258,8 @@ if __name__ == "__main__":
     uvicornThread = threading.Thread(
         target=uvicorn.run,
         args=("api:app",),
-        kwargs={"host": "0.0.0.0", "port": 8000},
+        kwargs={"host": "0.0.0.0", "port": 8000 , "log_level":"warning"},
+        
         daemon=True,
     )
     uvicornThread.start()

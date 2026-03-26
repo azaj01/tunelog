@@ -14,9 +14,10 @@
 import requests
 import time
 from config import build_url
-from config import build_url , _extract , itunesApi
+from config import build_url, _extract, itunesApi
 from db import init_db_lib, get_db_connection_lib
 from time import sleep
+from itunesFuzzy import useFallBackMethods
 
 # toggle_itune = False
 # isSyncing = False
@@ -105,6 +106,7 @@ def _get_json(url_value, retries=3):
 
     raise last_error
 
+
 GENRE_ALIASES = {
     "bollywood music": "bollywood",
     "hindi": "bollywood",
@@ -123,8 +125,8 @@ GENRE_ALIASES = {
     "quran recitation": "quran",
     "bengali movie music": "bengali",
     "фильмы": "soundtrack",
-    "indian music":"bollywood",
-    "asian music" : "default"
+    "indian music": "bollywood",
+    "asian music": "default",
 }
 
 
@@ -137,10 +139,10 @@ def normalise_genre(raw):
         # print(g)
 
         g = g.strip().lower()
-        
+
         # print(g)
         g = GENRE_ALIASES.get(g, g)  # if not in aliases, keep as-is
-        
+
         # print(g)
         if g not in result:
             result.append(g)
@@ -206,7 +208,7 @@ def remove_deleted_songs(navidrome_ids: set):
 
 
 def sync_library():
-    global _isSyncing, _progress, _startSyncSong , _stopSync
+    global _isSyncing, _progress, _startSyncSong, _stopSync
 
     _isSyncing = True
     _startSyncSong = False
@@ -235,6 +237,21 @@ def sync_library():
             explicit_val = existing[0]
             genre_val = existing[1]
 
+            if _toggle_itune and explicit_val == "notInItunes":
+                response = useFallBackMethods(song)
+                if response == "false":
+                    print("fallback method failed for song name  : ", song_title)
+                    skipped += 1
+                    _progress = round((i + 1) / total * 100, 2)
+                    print(
+                        f"[SKIP] {song_title} | explicit={explicit_val} genre={genre_val}"
+                    )
+                    continue
+
+                else:
+                    print("Fallback method success for song : ", song_title)
+                    updated += 1
+
             # explicit filled — skip entirely
             if explicit_val and explicit_val != "":
                 skipped += 1
@@ -243,6 +260,8 @@ def sync_library():
                     f"[SKIP] {song_title} | explicit={explicit_val} genre={genre_val}"
                 )
                 continue
+
+           
 
             # explicit is NULL
             if _toggle_itune:
@@ -280,9 +299,14 @@ def sync_library():
                         (new_explicit, new_genre, song_id),
                     )
 
-                    result = cursor.execute("SELECT explicit FROM library WHERE song_id = ?", (song_id,)).fetchone()
-                    print(f"[VERIFY] {song_title} explicit in DB = {result[0] if result else 'NOT FOUND'}")
+                    result = cursor.execute(
+                        "SELECT explicit FROM library WHERE song_id = ?", (song_id,)
+                    ).fetchone()
+                    print(
+                        f"[VERIFY] {song_title} explicit in DB = {result[0] if result else 'NOT FOUND'}"
+                    )
                 updated += 1
+
             else:
                 print(
                     f"[SKIP NO ITUNES] {song_title} | explicit is NULL but iTunes disabled"
@@ -347,7 +371,6 @@ def sync_library():
             else:
                 print("Stopped syncing")
                 break
-            
 
     conn.commit()
     conn.close()

@@ -16,7 +16,7 @@ The core logic — signal system, scoring formula, genre injection, playlist slo
 - Add a better api system for search excilit tag of songs,
    I have some ideas how to do it,
   currently in my songlist db in excilipt col there is notinitunes in some song, thats becuase some of the songs has noisy title ig : DJ Alok Main aur tu remix, these makes itunes to return wrong info
-  My idea is to make api requests to itunes in trail and error, try dj alok, try alok main  , try mai or tu, and use fuzzy module to get the closest to the reposne and use that, this will take time so make it automatic at a specify time i.g, 1 Am
+  My idea is to make api requests to itunes in trail and error, try dj alok, try alok main  , try mai or tu, and use fuzzy module to get the closest to the reposne and use that, this will take time so make it automatic at a specify time i.g, 1 Am  ---> done
 
 - Give users option to choose the amount of signal they want in the playlist by how much, right now its hardcoded but it can be added, but the playlist.py will change a lot, there is so many edge cases to handle in for that option, what if the amount of singal is less then why users wants, but it will a good feature to have, ---> DONE
 
@@ -45,6 +45,8 @@ The core logic — signal system, scoring formula, genre injection, playlist slo
 ## How It Works
 TuneLog watches your Navidrome listening activity in the background. It tracks whether you skip, finish, or replay songs, and uses that behavior to build personalised playlists automatically — one per user.
 
+### Can be modified from ui
+
 | Listening Behavior | Signal | Weight |
 |---|---|---|
 | Skipped before 30% | skip | -2 |
@@ -65,6 +67,7 @@ Generated playlists include:
 - **Python** — watcher + playlist generator
 - **SQLite** — two local databases (listen history + full library)
 - **FastAPI** — REST API layer (early stage)
+- **RapidFuzz** - For finding best matches among results
 - **React + TypeScript + Vite** — web dashboard (early stage, TailAdmin base)
 
 ## Project Structure
@@ -100,6 +103,18 @@ Users can be added directly from the TuneLog web dashboard — no manual config 
 3. Fill in the username and password — TuneLog will create the user in Navidrome and register them automatically
 
 > If you're running via Docker, replace `localhost` with your server's IP address.
+
+## Library Sync 
+
+###  For playlist generation or execilpt filter, it need to be synced
+
+- Users can sync there libaries from Navidrome server using `fast sync`.
+- After `fast sync`, they can either use `slow sync` or use `auto sync`(script Must be running for that),
+- While `Slow sync` is happening, It will look up in `Itunes` for song detalis
+
+- If songs has messy metadata or noisy name it will mark it as `Not In Itunes`.
+- If used `Slow sync again` It will take those `Not In Tunes` song and match it using diffrent combinations and tries to resolve it
+- If that faild users can mannually mark them as `Exeplict, Not Execlipt, Cleaned`.(not Implemented yet) 
 
 
 
@@ -192,6 +207,8 @@ TuneLog will:
 - Automatically regenerate personalised playlists every hour (when no one is playing)
 
 ## Playlist Generation
+
+#### Can be changed from Web dashboard
 Playlists are pushed directly to Navidrome and appear under each user's account as **"Tunelog - username"**. They are private — only visible to the playlist owner.
 
 | Slot | Share | Notes |

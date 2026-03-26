@@ -10,8 +10,8 @@ def start_sse():
     url = f"{Navidrome_url}/api/events?jwt={creds["jwt"]}"
     response = requests.get(url , stream=True , timeout=45)
 
-    print(response.status_code)
-    print(response.headers)
+    # print(response.status_code)
+    # print(response.headers)
     
     event_type = None
     for line in response.iter_lines(decode_unicode=True):
@@ -25,7 +25,7 @@ def start_sse():
             data = line.split(":", 1)[1].strip()
             if event_type == "nowPlayingCount":
                 event_queue.put("nowPlaying")
-                print("PUT IN QUQUE")
-            print(f"EVENT: {event_type} → {data}")
+                # print("PUT IN QUQUE")
+            # print(f"EVENT: {event_type} → {data}")
 
 
