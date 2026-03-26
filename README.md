@@ -107,6 +107,7 @@ Users can be added directly from the TuneLog web dashboard — no manual config 
 ## Library Sync 
 
 ###  For playlist generation or execilpt filter, it need to be synced
+### It is highly recommened to use picad before doing these.
 
 - Users can sync there libaries from Navidrome server using `fast sync`.
 - After `fast sync`, they can either use `slow sync` or use `auto sync`(script Must be running for that),
