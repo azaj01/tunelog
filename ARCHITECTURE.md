@@ -4,14 +4,6 @@ This document outlines the technical architecture, data flow, and design decisio
 
 ## TODO
 
-
-- Added docker support for frontend
-
-
-- Itunes support is broken, My thinking was that i will implement a rating system, if check if the song has metadata, and explicit metadata, If not then fetch it using itunes and add it songlist database, but its not completed yet
-
-- SSE works fine but when using Navidrome client like Tempo it generate more then 1 event when playing music, this makes Watcher() run more then once, No imminnet problem yet, but it can create an overhead
-
 - Create a failsafe and change the songlist db depeneding on deleted songs, currently if some songs were delete, playlist will created and based on those deleted songs
 
 
@@ -30,15 +22,15 @@ This document outlines the technical architecture, data flow, and design decisio
 - [x] Docker support
 - [x] FastAPI backend (early stage)
 - [ ] Web UI dashboard (in progress — needs polish)
-- [ ] Auto library sync scheduler
+- [x] Auto library sync scheduler
 - [ ] M3U export
-- [ ] Add stop library sync
+- [x] Add stop library sync
 - [ ] Figure out why cpu spikes when using fast sync in docker but not when doing python3
-- [ ] Add more information to users in users page
+- [x] Add more information to users in users page
 - [ ] Add delete user option
-- [ ] Add playlist creation
-- [ ] Figure out if I can use updateplaylist api of navidrome
-- [ ] Use a better approach to the marking stat system, if user listen to one song and get one star and listen again completely it gets flagged as repeat and gets a 5 star
+- [x] Add playlist creation
+- [x] Figure out if I can use updateplaylist api of navidrome
+- [x] Use a better approach to the marking stat system, if user listen to one song and get one star and listen again completely it gets flagged as repeat and gets a 5 star
 
 
 
@@ -81,6 +73,7 @@ iTunes API enforces rate limits (~20 req/min). TuneLog uses a 1s delay between c
 To counter this, I have added A toggle for it in `library.py`
 
 ## The "Ghost Flush" Mechanism
+
 
 ### The Problem: API Reporting Latency
 TuneLog interacts with the Navidrome (Subsonic) API to monitor real-time listening activity. However, the Subsonic API has a known limitation: it does not actively report a **"Paused"** state.
@@ -250,7 +243,7 @@ days_since = max((datetime.now() - datetime.fromisoformat(timestamp)).days, 0)
 
 ---
 
-## Multi-User Setup
+## Multi-User Setup - can be done by ui
 
 TuneLog supports multiple Navidrome users. Each user gets their own independently generated playlist based on their personal listen history.
 
@@ -308,7 +301,180 @@ Handles the ingestion of Navidrome library data and optional enrichment via iTun
 * **`GET /api/sync/stop`**: Sets `library._stopSync = True` to gracefully kill an active sync thread.
 * **`GET /api/sync/setting`**: Persists `auto_sync_hour` and `use_itunes` preferences in memory.
 
+## Fallback Matching Algorithm
+
+This module is responsible for resolving songs marked as `notInItunes` by attempting multiple search strategies and selecting the best possible match using fuzzy scoring.
+
 ---
+
+### Overview
+
+The system uses a **multi-stage fallback pipeline** combined with **fuzzy matching** to identify songs from unreliable or messy metadata.
+
+Common issues handled:
+- Incorrect or incomplete song titles
+- Mixed-language or noisy metadata (e.g., YouTube-style names)
+- Missing album or artist information
+- Songs not directly available in iTunes
+
+---
+
+### Core Strategy
+
+1. Normalize and clean input metadata
+2. Perform iTunes search with multiple fallback strategies
+3. Score results using fuzzy matching
+4. Select the best match based on confidence threshold
+5. Update database accordingly
+
+---
+
+### Text Normalization
+
+Before searching, all metadata is cleaned using `clean_text()`:
+
+- Converts text to lowercase
+- Removes:
+  - URLs
+  - common junk words (`official`, `lyrics`, `hd`, etc.)
+  - download site names
+  - remix / DJ tags
+- Cleans brackets and featured artist patterns
+- Normalizes spacing and symbols
+
+This ensures consistent comparison across APIs.
+
+---
+
+### Fuzzy Matching
+
+Matching is done using `rapidfuzz` with a weighted scoring system:
+
+- Title match weight: **60%**
+- Artist match weight: **40%**
+
+#### Scoring Rules
+
+- Reject if artist score < 50 (when artist exists)
+- Reject if title score < 40
+- Short titles (≤4 chars) require stricter artist match
+- Final score must be ≥ 70 to qualify
+
+```python
+score = (title_score * 0.6) + (artist_score * 0.4)
+````
+
+---
+
+### Search Pipeline
+
+The system attempts multiple strategies in sequence:
+
+#### 1. Primary iTunes Search
+
+* Query: `title + artist`
+* If match found → stop
+
+---
+
+#### 2. Fallback 1: Title-only Search
+
+* Query: `title`
+* Useful when artist metadata is incorrect
+
+---
+
+#### 3. Fallback 2: Artist-only Search
+
+* Query: `artist`
+* Useful when title is noisy or corrupted
+
+---
+
+#### 4. Fallback 3: Album-based Lookup
+
+* Search album in iTunes
+* Fetch all tracks from album
+* Perform fuzzy matching on track list
+
+This is effective when:
+
+* Title is slightly incorrect
+* Album metadata is reliable
+
+---
+
+#### 5. Fallback 4: MusicBrainz Integration
+
+* Query MusicBrainz API using:
+
+  * title
+  * artist
+  * album (if available)
+* Convert response into iTunes-like format
+* Retry matching via album lookup
+
+Used as a **last resort** when iTunes fails.
+
+---
+
+### Fuzzy Matching Control
+
+To prevent excessive computation:
+
+* Global `totalTries` counter is maintained
+* Hard limit (`tryLimit`, default 500)
+* Stops processing once limit is reached
+
+---
+
+### Match Decision
+
+After all attempts:
+
+#### If match is found:
+
+* Score ≥ 80:
+
+  * Update:
+
+    * explicit status
+    * genre
+    * artist
+* Score < 80:
+
+  * Update only explicit status
+
+#### If no match:
+
+* Mark song as `manual`
+* Requires user intervention
+
+---
+
+### Database Updates
+
+Handled via `updateSong()`:
+
+Fields updated:
+
+* `explicit`
+* `genre` (optional)
+* `artist` (optional)
+* `last_synced` timestamp
+### Example Flow
+
+```
+Input Song → Clean Metadata
+          → iTunes Search
+          → Fallback 1
+          → Fallback 2
+          → Fallback 3 (Album)
+          → MusicBrainz
+          → Final Match Decision
+```
+
+
 
 ### 3. Playlist Engine
 Interacts with the scoring logic to generate and retrieve personalized music.
