@@ -10,6 +10,12 @@
 # 3.
 
 
+# UPDATE :
+#     1. updated the logic to check repeat, instead of every two signal count as repeate, 
+#         if and only if last intreaction was positive or repeat it will count as repeat
+
+
+
 # TODO:
 
 # implement a better system to signal positive and stuff
@@ -78,6 +84,7 @@ def navidrome_url(endpoint):
 
 def Watcher():
     url_response = navidrome_url("getNowPlaying")
+    # print(url_response)
     entries = url_response["subsonic-response"].get("nowPlaying", {}).get("entry", [])
 
     now = time.time()
@@ -148,22 +155,25 @@ def signal_system(percent_played, song_id, user_id):
     else:
         base = "positive"
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT COUNT(*) FROM listens
-        WHERE song_id = ? AND user_id = ?
-        AND timestamp < datetime('now', '-10 minutes')
-    """,
-        (song_id, user_id),
-    )
+    if base == "positive":
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    prior_listens = cursor.fetchone()[0]
-    conn.close()
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM listens 
+            WHERE song_id = ? AND user_id = ? 
+            AND signal IN ('positive', 'repeat')
+            AND timestamp > datetime('now', '-30 minutes')
+        """,
+            (song_id, user_id),
+        )
 
-    if prior_listens > 0 and base == "positive":
-        base = "repeat"
+        valid_prior_positives = cursor.fetchone()[0]
+        conn.close()
+
+        if valid_prior_positives > 0:
+            base = "repeat"
 
     return base
 
@@ -179,7 +189,7 @@ def log_history(song):
     signal = signal_system(percent_played, song["song_id"], song["user_id"])
 
 
-    push_star(song["song_id"], song["user_id"], signal)
+    push_star(song, signal)
     # print("signal : ", signal)
     conn = get_db_connection()
     cursor = conn.cursor()

@@ -153,7 +153,7 @@ def generalItunesSearch(
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             print(f"[ITUNES] HTTP {status} — {title} (attempt {attempt}/{maxRetries})")
-            if status in (400, 403, 404):  # pointless to retry these
+            if status in (400, 403, 404): 
                 return None
 
         except requests.exceptions.ConnectionError:
@@ -168,7 +168,7 @@ def generalItunesSearch(
             )
 
         if attempt < maxRetries:
-            sleep(retryDelay * attempt)  # 3s, 6s, 9s...
+            sleep(retryDelay * attempt) 
 
     print(f"[ITUNES] All {maxRetries} attempts failed — {title}")
     return None
@@ -196,19 +196,47 @@ def mb_to_itunes_format(mb_response):
     return results
 
 
-def musicbrainz_search(query: str, entity: str = "recording", limit: int = 10 ) :
+def musicbrainz_search(
+    query: str, entity: str = "recording", limit: int = 10, max_retries: int = 3
+):
     base_url = f"https://musicbrainz.org/ws/2/{entity}"
     headers = {"User-Agent": "TuneLog/1.0 (https://github.com/adiiverma40/tunelog/)"}
-    try:
-        encoded_query = urllib.parse.quote(query)
-        url = f"{base_url}?query={encoded_query}&fmt=json&limit={limit}"
-        time.sleep(1)
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"[MB] Error: {e} — {query}")
-        return None
+    encoded_query = urllib.parse.quote(query)
+    url = f"{base_url}?query={encoded_query}&fmt=json&limit={limit}"
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            time.sleep(1)  
+            response = requests.get(url, headers=headers, timeout=10)
+
+            if 400 <= response.status_code < 500:
+                print(f"[MB] Client error {response.status_code}, skipping — {query}")
+                return None
+
+            response.raise_for_status()  
+            return response.json()
+
+        except requests.exceptions.Timeout:
+            print(f"[MB] Timeout on attempt {attempt}/{max_retries} — {query}")
+
+        except requests.exceptions.ConnectionError:
+            print(f"[MB] Connection error on attempt {attempt}/{max_retries} — {query}")
+
+        except requests.exceptions.HTTPError as e:
+            print(f"[MB] HTTP error on attempt {attempt}/{max_retries}: {e} — {query}")
+
+        except Exception as e:
+            print(
+                f"[MB] Unexpected error on attempt {attempt}/{max_retries}: {e} — {query}"
+            )
+
+        if attempt < max_retries:
+            wait = 2**attempt 
+            print(f"[MB] Retrying in {wait}s...")
+            time.sleep(wait)
+
+    print(f"[MB] All {max_retries} attempts failed — {query}")
+    return None
 
 
 def fuzzyScoreMatch(response, song, isAlbum=False , tryLimit : int = 500):
