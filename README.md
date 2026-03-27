@@ -1,5 +1,5 @@
 #  TuneLog
-**A self-hosted music recommendation system for Navidrome.** TuneLog learns your taste by watching how you actually interact with your music—tracking skips, finishes, and replays to build evolving, personalized playlists without you ever touching a "Like" button.
+**A self-hosted music recommendation system for Navidrome.** TuneLog learns your taste by watching how you actually interact with your music tracking skips, finishes, and replays to build evolving, personalized playlists without you ever touching a "Like" button.
 
 ---
 
