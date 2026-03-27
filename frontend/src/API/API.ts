@@ -27,6 +27,7 @@ export interface SyncStatus {
   explicit_songs: number;
   last_sync: string | null;
   songs_needing_itunes: number;
+  timezone: string;
   explicit_counts: {
     explicit: number;
     notExplicit: number;
@@ -181,6 +182,15 @@ export interface ManualMarkingSong {
   explicit: string | null;
 }
 
+
+export interface FallbackSyncStatus {
+  status: string;
+  is_running: boolean;
+  processed: number;
+  total: number;
+  progress: number;
+}
+
 export type ExplicitTag = "explicit" | "cleaned" | "notExplicit";
 
 export async function fetchPing(): Promise<{ status: string }> {
@@ -217,16 +227,20 @@ export async function fetchSyncStop(): Promise<SyncStopResponse> {
   return res.json();
 }
 
+
 export async function fetchSyncSettings(
-  auto_sync_hour: number,
-  use_itunes: boolean,
-): Promise<SyncSettingResponse> {
+  autoSyncHour: number,
+  useItunes: boolean,
+  timezone: string = "Asia/Kolkata", 
+): Promise<{ status: string }> {
   const res = await fetch(
-    `${BASE_URL}/api/sync/setting?auto_sync_hour=${auto_sync_hour}&use_itunes=${use_itunes}`,
+    `${BASE_URL}/api/sync/setting?auto_sync_hour=${autoSyncHour}&use_itunes=${useItunes}&timezone=${encodeURIComponent(timezone)}`,
   );
-  if (!res.ok) throw new Error("Failed to save sync settings");
+  if (!res.ok) throw new Error("Failed to save settings");
   return res.json();
 }
+
+
 
 export async function fetchLogin(data: LoginRequest): Promise<LoginResponse> {
   const res = await fetch(`${BASE_URL}/auth/login`, {
@@ -382,3 +396,30 @@ export async function updateExplicitTag(
   if (!res.ok) throw new Error("Failed to update explicit tag");
   return res.json();
 }
+
+
+export async function startFallbackSync(
+  tries: number = 500,
+): Promise<{ status: string; total?: number; reason?: string }> {
+  const res = await fetch(`${BASE_URL}/api/sync/fallback?tries=${tries}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to start fallback sync");
+  return res.json();
+}
+
+export async function fetchFallbackSyncStatus(): Promise<FallbackSyncStatus> {
+  const res = await fetch(`${BASE_URL}/api/sync/fallback/status`);
+  if (!res.ok) throw new Error("Failed to fetch fallback sync status");
+  return res.json();
+}
+
+export async function stopFallbackSync(): Promise<{ status: string }> {
+  const res = await fetch(`${BASE_URL}/api/sync/fallback/stop`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to stop fallback sync");
+  return res.json();
+}
+
+

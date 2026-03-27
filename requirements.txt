@@ -3,3 +3,4 @@ python-dotenv==1.2.2
 requests==2.32.5
 uvicorn==0.42.0
 rapidfuzz
+zoneinfo

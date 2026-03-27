@@ -11,6 +11,7 @@ def start_sse():
     response = requests.get(url , stream=True , timeout=45)
 
     # print(response.status_code)
+    # print("In watcher with response : ")
     # print(response.headers)
     
     event_type = None

@@ -44,10 +44,13 @@ import requests
 import threading
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
 
 # from queue import Queue
 from config import build_url, event_queue
-from db import get_db_connection, init_db, init_db_lib, init_db_usr, init_db_playlist
+from db import get_db_connection, init_db, init_db_lib, init_db_usr, init_db_playlist , get_db_connection_lib
+from itunesFuzzy import useFallBackMethods
 import library
 # from playlist import main as generate_playlist
 from library import normalise_genre
@@ -93,7 +96,6 @@ def Watcher():
             print(f"[STOP] {user_id} stopped")
         return
 
-    # ── deduplicate, keep most recent entry per user ──
     latest = {}
     for entry in entries:
         user_id = entry["username"]
@@ -106,7 +108,6 @@ def Watcher():
         song_id = entry["id"]
 
         if user_id in active and active[user_id]["song_id"] == song_id:
-            # same song — accumulate played time
             active[user_id]["actual_played"] += now - active[user_id]["last_seen"]
             active[user_id]["last_seen"] = now
             print(
@@ -114,7 +115,6 @@ def Watcher():
             )
 
         else:
-            # song changed — log old, start new
             if user_id in active:
                 active[user_id]["actual_played"] += now - active[user_id]["last_seen"]
                 log_history(active.pop(user_id))
@@ -132,7 +132,6 @@ def Watcher():
             }
             print(f"[NEW] {user_id} started: {entry['title']}")
 
-    # ── users no longer in nowPlaying ──
     current_users = {entry["username"] for entry in entries}
     for user_id in list(active.keys()):
         if user_id not in current_users:
@@ -169,7 +168,6 @@ def signal_system(percent_played, song_id, user_id):
     return base
 
 
-# logs history in db
 def log_history(song):
     # print(song)
     # played = min(time.time() - song["start_time"], song["duration"])
@@ -180,14 +178,12 @@ def log_history(song):
     percent_played = min(round((played / song["duration"]) * 100), 100)
     signal = signal_system(percent_played, song["song_id"], song["user_id"])
 
-    # pushing star ratings
 
     push_star(song["song_id"], song["user_id"], signal)
     # print("signal : ", signal)
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # update database if song is already in database, if the song was repeated after more then 10 mins, add in new row
 
     cursor.execute(
         """
@@ -201,7 +197,6 @@ def log_history(song):
     )
 
     existing = cursor.fetchone()
-    # print("existing", existing[0] if existing else None)
 
     if existing:
         cursor.execute(
@@ -240,6 +235,41 @@ def log_history(song):
     conn.close()
 
 
+def autoSyncWithFallback():
+    print("[TuneLog] Starting auto sync...")
+    library.sync_library()
+
+    conn = get_db_connection_lib()
+    not_in_itunes = conn.execute(
+        "SELECT COUNT(*) FROM library WHERE explicit = 'notInItunes'"
+    ).fetchone()[0]
+    conn.close()
+
+    if not_in_itunes > 0:
+        print(
+            f"[TuneLog] Auto sync done. {not_in_itunes} songs need fallback — starting..."
+        )
+
+        songs_raw = conn = (
+            get_db_connection_lib()
+            .execute("SELECT * FROM library WHERE explicit = 'notInItunes'")
+            .fetchall()
+        )
+        songs = [dict(s) for s in songs_raw]
+
+        library._fallbackStop = False
+        for song in songs:
+            if library._fallbackStop:
+                print("[TuneLog] Fallback stopped")
+                break
+            result = useFallBackMethods(song, tries=500)
+            print(f"[TuneLog] Fallback result: {result}")
+
+        print("[TuneLog] Fallback sync complete")
+    else:
+        print("[TuneLog] Auto sync done. No notInItunes songs — skipping fallback")
+
+
 if __name__ == "__main__":
     # Database
     print("Initializing databse")
@@ -247,14 +277,6 @@ if __name__ == "__main__":
     init_db_lib()
     init_db_usr()
     init_db_playlist()
-
-    # library.sync_library()
-
-    # generate playlist
-    # print("[TuneLog] Generating playlist...")
-    # generate_playlist()
-
-    # Run uvicorn in background thread
     uvicornThread = threading.Thread(
         target=uvicorn.run,
         args=("api:app",),
@@ -277,22 +299,21 @@ if __name__ == "__main__":
             syncThread = threading.Thread(target=library.sync_library, daemon=True)
             syncThread.start()
 
-        now = datetime.now()
+        now = datetime.now(ZoneInfo(library._timezone))
         current_hour = now.hour
         current_day = now.date()
         settings = library.getSyncSettings()
         auto_sync_hour = settings["auto_sync"]
-
+        print("Current Hour : " ,  current_hour)
         if (
             current_hour == auto_sync_hour
             and current_day != last_auto_sync_day
             and not library._isSyncing
-        ):
-            print(f"[TuneLog] Auto sync triggered at {now.strftime('%H:%M')}...")
-            last_auto_sync_day = current_day
-            syncThread = threading.Thread(target=library.sync_library, daemon=True)
-            syncThread.start()
-
+            ):
+                print(f"[TuneLog] Auto sync triggered at {now.strftime('%H:%M')}...")
+                last_auto_sync_day = current_day
+                syncThread = threading.Thread(target=autoSyncWithFallback, daemon=True)  # ← changed
+                syncThread.start()
         try:
             event = event_queue.get(
                 timeout=2

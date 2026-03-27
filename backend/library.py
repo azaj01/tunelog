@@ -17,29 +17,7 @@ from config import build_url
 from config import build_url, _extract, itunesApi
 from db import init_db_lib, get_db_connection_lib
 from time import sleep
-from itunesFuzzy import useFallBackMethods
 
-# toggle_itune = False
-# isSyncing = False
-# startSyncSong = False
-# progress = 0
-# auto_sync = 2
-
-
-# def toggleItune():
-#     if toggle_itune:
-#         toggle_itune = False
-#     else:
-#         toggle_itune = True
-#     return toggle_itune
-
-
-# def toggleIsSync():
-#     if isSyncing:
-#         isSyncing = False
-#     else:
-#         isSyncing = True
-#     return isSyncing
 
 
 _auto_sync = 2
@@ -48,12 +26,15 @@ _startSyncSong = False
 _isSyncing = False
 _progress = 0
 _stopSync = False
+_fallbackStop = False
+_timezone = "Asia/Kolkata"
 
 
-def setSyncSettings(auto_sync=2, itunes=False):
-    global _auto_sync, _toggle_itune
+def setSyncSettings(auto_sync=2, itunes=False, timezone="Asia/Kolkata"):
+    global _auto_sync, _toggle_itune, _timezone
     _auto_sync = auto_sync
     _toggle_itune = itunes
+    _timezone = timezone
 
 
 def getSyncSettings():
@@ -237,22 +218,21 @@ def sync_library():
             explicit_val = existing[0]
             genre_val = existing[1]
 
-            if _toggle_itune and explicit_val == "notInItunes":
-                response = useFallBackMethods(song)
-                if response == "false":
-                    print("fallback method failed for song name  : ", song_title)
-                    skipped += 1
-                    _progress = round((i + 1) / total * 100, 2)
-                    print(
-                        f"[SKIP] {song_title} | explicit={explicit_val} genre={genre_val}"
-                    )
-                    continue
+            # if _toggle_itune and explicit_val == "notInItunes":
+            #     response = useFallBackMethods(song)
+            #     if response == "false":
+            #         print("fallback method failed for song name  : ", song_title)
+            #         skipped += 1
+            #         _progress = round((i + 1) / total * 100, 2)
+            #         print(
+            #             f"[SKIP] {song_title} | explicit={explicit_val} genre={genre_val}"
+            #         )
+            #         continue
 
-                else:
-                    print("Fallback method success for song : ", song_title)
-                    updated += 1
+            #     else:
+            #         print("Fallback method success for song : ", song_title)
+            #         updated += 1
 
-            # explicit filled — skip entirely
             if explicit_val and explicit_val != "":
                 skipped += 1
                 _progress = round((i + 1) / total * 100, 2)
@@ -362,7 +342,6 @@ def sync_library():
             f"[SYNC] {_progress}% | inserted={inserted} updated={updated} skipped={skipped}"
         )
 
-        # commit every 5 songs — don't wait until end
         if (i + 1) % 5 == 0:
             conn.commit()
             print(f"[SYNC] Committed at {i + 1} songs")
@@ -375,7 +354,7 @@ def sync_library():
     conn.commit()
     conn.close()
 
-    # cross-reference — remove songs deleted from Navidrome
+    # cross-reference remove songs deleted from Navidrome
     navidrome_ids = {song["id"] for song in songs}
     print(
         f"[CLEANUP] Cross-referencing {len(navidrome_ids)} Navidrome songs against DB..."

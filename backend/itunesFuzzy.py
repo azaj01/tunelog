@@ -7,8 +7,6 @@
 # and loop in every response for the best match using fuzzyScoreMatch
 
 
-
-
 # for songs that has too much messy names like mix of punjabi hindi and english or other lang. + random stuff like yt channal name and
 #  stuff that using this method is not able to get in that case i will let user mannaully choose , its better that way
 
@@ -20,6 +18,7 @@ import requests
 import re
 import time
 import urllib.parse
+import library 
 
 from db import get_db_connection_lib
 
@@ -228,7 +227,7 @@ def fuzzyScoreMatch(response, song, isAlbum=False , tryLimit : int = 500):
     results = []
 
     for res in response:
-        if totalTries >= tryLimit:   # ✅ >= not ==, checked BEFORE processing
+        if totalTries >= tryLimit:   
             print(f"[FUZZY] Hit {tryLimit} try limit, stopping.")
             return None, 0
 
@@ -257,9 +256,7 @@ def fuzzyScoreMatch(response, song, isAlbum=False , tryLimit : int = 500):
         totalTries += 1 
 
         results.append((fuzzyScore, res))
-        if totalTries == 500:
-            return None , 0 
-
+     
     if not results:
         return None, 0
 
@@ -285,7 +282,7 @@ def fallback2(song):
     return generalItunesSearch(artist, "", 200)
 
 
-def fallback3(song):
+def fallback3(song , tries = 500):
     print("[FB3] Album lookup")
     album = clean_text(song.get("album", ""))
     if not album or album == "unknown album":
@@ -306,13 +303,13 @@ def fallback3(song):
             trimText=False,
         )
         if lookup:
-            match, sc = fuzzyScoreMatch(lookup, song, True)
+            match, sc = fuzzyScoreMatch(lookup, song, True , tryLimit= 500)
             if match:
                 return match, sc
     return None, 0
 
 
-def fallback4(song):
+def fallback4(song , trie = 500):
     print("[FB4] MusicBrainz")
     title = clean_text(song.get("title", ""))
     artist = clean_text(song.get("artist", ""))
@@ -334,7 +331,7 @@ def fallback4(song):
         is_album = True
 
     r = mb_to_itunes_format(res)
-    return fuzzyScoreMatch(r, song, is_album)
+    return fuzzyScoreMatch(r, song, is_album , tryLimit=trie) 
 
 
 def itunes_to_song_format(res):
@@ -347,10 +344,15 @@ def itunes_to_song_format(res):
     }
 
 
-def useFallBackMethods(song):
-    print("Getting notInItunes songs...")
-    # print(song)
-    song_id = song["id"]
+def useFallBackMethods(song, tries):
+    global totalTries
+    totalTries = 0  
+
+    if library._fallbackStop:
+        print("sync Stopping Command Received")
+        return
+
+    song_id = song["song_id"]
     print(f"\n{'='*60}")
     print(f"Processing: {song['title']} | {song['artist']}")
     print(f"{'='*60}")
@@ -362,30 +364,29 @@ def useFallBackMethods(song):
 
     raw = generalItunesSearch(title, artist, 100)
     if raw:
-        match, sc = fuzzyScoreMatch(raw, song)
+        match, sc = fuzzyScoreMatch(raw, song, tryLimit=tries)
 
-    if not match:
+    if not match and totalTries < tries:  
         raw = fallback1(song)
         if raw:
-            match, sc = fuzzyScoreMatch(raw, song)
+            match, sc = fuzzyScoreMatch(raw, song, tryLimit=tries)
 
-    if not match:
+    if not match and totalTries < tries:  
         raw = fallback2(song)
         if raw:
-            match, sc = fuzzyScoreMatch(raw, song)
+            match, sc = fuzzyScoreMatch(raw, song, tryLimit=tries)
 
-    if not match:
-        result = fallback3(song)
+    if not match and totalTries < tries:  
+        result = fallback3(song, tries)
         if result and isinstance(result, tuple):
             match, sc = result
 
-    if not match:
-        mb_match, mb_sc = fallback4(song)
+    if not match and totalTries < tries:  
+        mb_match, mb_sc = fallback4(song, trie=tries)
         if mb_match:
-
             itunes_song = itunes_to_song_format(mb_match)
             if itunes_song:
-                result = fallback3(itunes_song)
+                result = fallback3(itunes_song, tries)
                 if result and isinstance(result, tuple):
                     match, sc = result
 
@@ -403,21 +404,11 @@ def useFallBackMethods(song):
             )
             return f"Song matched with a score of : {sc}"
         else:
-            updateSong(
-                song_id=song_id,
-                explicit=explicit,
-            )
+            updateSong(song_id=song_id, explicit=explicit)
             return f"Song matched with a score of : {sc}"
-
     else:
-        print(
-            f"[SKIP] No match found for: {song['title']} — leaving as notInItunes"
-        )
-        updateSong(
-            song_id=song_id,
-            explicit="manual",
-        )
-
+        print(f"[SKIP] No match found for: {song['title']} — leaving as notInItunes")
+        updateSong(song_id=song_id, explicit="manual")
         return "false"
 
 

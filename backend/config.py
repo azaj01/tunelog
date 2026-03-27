@@ -44,25 +44,6 @@ def getAllUser():
     return USER_CREDENTIALS
 
 
-# Navidrome does not support subsonic api create user endpoint
-
-# http://your-server/rest/createUser.view?username=adii&password=1234&email=adii@mail.com&u=admin&p=adminpass&v=1.13.0&c=MyApp&f=json
-
-# def createUsrUrl(username, password, isAdmin, admin, adminPD , email = ""):
-#     url = (
-#         f"{Navidrome_url}/rest/createUser.view"
-#         f"?username={username}"
-#         f"&password={password}"
-#         f"&email={email}"
-#         f"&adminRole={str(isAdmin).lower()}"
-#         f"&u={admin}"
-#         f"&p={adminPD}"
-#         f"&v={api_version}"
-#         f"&c={app_name}"
-#         f"&f=json"
-#     )
-#     return url
-
 
 # default url to pull data from api
 def build_url(endpoint):
@@ -97,6 +78,7 @@ def login():
     }
     )
     data = res.json()
+    # print("Logged in with data : " , data)
     return {
         "jwt": data["token"],
         "subsonic_token": data["subsonicToken"],

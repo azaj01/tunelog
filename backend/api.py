@@ -26,6 +26,8 @@ from playlist import (
     signalWeights
 )
 import library
+from itunesFuzzy import useFallBackMethods
+from threading import Thread
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -365,7 +367,6 @@ def getUsers(data: AdminAuth):
     }
 
 
-
 @app.get("/admin/getUserData")
 def getUserData(username: str = "", password: str = ""):
     conn = get_db_connection()
@@ -468,12 +469,13 @@ def syncStatus():
         "explicit_songs": explicit_songs,
         "last_sync": last_sync[0] if last_sync else None,
         "songs_needing_itunes": songs_needing_itunes,
+        "timezone": library._timezone,
         "explicit_counts": {
             "explicit": explicit_songs,
             "notExplicit": not_explicit,
             "cleaned": cleaned,
             "notInItunes": not_in_itunes,
-            "manual" : manual_needed,
+            "manual": manual_needed,
             "pending": songs_needing_itunes,
         },
     }
@@ -486,8 +488,11 @@ def startSync(use_itunes: bool = False):
 
 
 @app.get("/api/sync/setting")
-def syncSetting(auto_sync_hour: int = 2, use_itunes: bool = False):
-    library.setSyncSettings(auto_sync_hour, use_itunes)
+def syncSetting(
+    auto_sync_hour: int = 2, use_itunes: bool = False, timezone: str = "Asia/Kolkata"
+):
+    library.setSyncSettings(auto_sync_hour, use_itunes, timezone)
+    
     return {"status": "ok"}
 
 
@@ -848,6 +853,76 @@ def getMonthlyListens():
     rows = cursor.execute(query).fetchall()
     conn.close()
     return [{"month": row[0], "count": row[1]} for row in rows]
+
+# module-level state (same pattern as library._isSyncing)
+_fallbackRunning = False
+_fallbackProcessed = 0
+_fallbackTotal = 0
+_fallbackStop = False
+
+
+@app.post("/api/sync/fallback")
+def syncByFallback(tries: int = 500):
+    global _fallbackRunning, _fallbackProcessed, _fallbackTotal, _fallbackStop
+    print("Using fallback to sync")
+    print ("No of tries for each song : " , tries)
+    if _fallbackRunning:
+        return {"status": "error", "reason": "Fallback sync already running"}
+
+    conn = get_db_connection_lib()
+    cursor = conn.cursor()
+    songs_raw = cursor.execute(
+        "SELECT * FROM library WHERE explicit = 'notInItunes'"
+    ).fetchall()
+    conn.close()
+
+    songs = [dict(s) for s in songs_raw]
+
+    if not songs:
+        return {"status": "ok", "reason": "No notInItunes songs found"}
+
+    _fallbackRunning = True
+    _fallbackProcessed = 0
+    _fallbackTotal = len(songs)
+    _fallbackStop = False
+
+    def run():
+        global _fallbackRunning, _fallbackProcessed, _fallbackStop
+        library._fallbackStop = False
+        for song in songs:
+            if _fallbackStop:
+                print("[FALLBACK] Stop requested")
+                break
+            result = useFallBackMethods(song , tries)
+            _fallbackProcessed += 1
+            print(f"[FALLBACK] {_fallbackProcessed}/{_fallbackTotal} — {result}")
+        _fallbackRunning = False
+        _fallbackStop = False
+
+    Thread(target=run, daemon=True).start()
+    return {"status": "ok", "total": len(songs)}
+
+
+@app.get("/api/sync/fallback/status")
+def fallbackStatus():
+    return {
+        "status": "ok",
+        "is_running": _fallbackRunning,
+        "processed": _fallbackProcessed,
+        "total": _fallbackTotal,
+        "progress": (
+            round((_fallbackProcessed / _fallbackTotal) * 100)
+            if _fallbackTotal > 0
+            else 0
+        ),
+    }
+
+
+@app.get("/api/sync/fallback/stop")
+def stopFallback():
+    global _fallbackStop
+    _fallbackStop = True
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":
