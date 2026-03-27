@@ -318,11 +318,11 @@ if __name__ == "__main__":
             event = event_queue.get(
                 timeout=2
             )  
-            print("in while loop : ", event)
+            # print("in while loop : ", event)
             if event == "nowPlaying":
-                n += 1
-                print("Its fucking working")
-                print(n)
+                # n += 1
+                # print("Its fucking working")
+                # print(n)
                 Watcher()
         except Exception as e:
             if "Empty" not in str(type(e).__name__):
