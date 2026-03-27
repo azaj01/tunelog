@@ -189,38 +189,37 @@ def log_history(song):
     signal = signal_system(percent_played, song["song_id"], song["user_id"])
 
 
-    push_star(song, signal)
     # print("signal : ", signal)
     conn = get_db_connection()
     cursor = conn.cursor()
 
 
+    # cursor.execute(
+    #     """
+    #     SELECT id FROM listens
+    #     WHERE song_id = ? and user_id = ? 
+    #     AND timestamp >= datetime('now', '-10 minutes')
+    #     ORDER BY timestamp DESC 
+    #     LIMIT 1
+    #     """,
+    #     (song["song_id"], song["user_id"]),
+    # )
+
+    # existing = cursor.fetchone()
+
+    # if existing:
+    #     cursor.execute(
+    #         """
+    #         UPDATE listens 
+    #         SET played = ?, percent_played = ?, signal = ?
+    #         WHERE id = ?
+    #     """,
+    #         (played, percent_played, signal, existing[0]),
+    #     )
+    #     # print(f"[UPDATE] {song['user_id']} | {song['title']} | {percent_played}%")
+
+    # else:
     cursor.execute(
-        """
-        SELECT id FROM listens
-        WHERE song_id = ? and user_id = ? 
-        AND timestamp >= datetime('now', '-10 minutes')
-        ORDER BY timestamp DESC 
-        LIMIT 1
-        """,
-        (song["song_id"], song["user_id"]),
-    )
-
-    existing = cursor.fetchone()
-
-    if existing:
-        cursor.execute(
-            """
-            UPDATE listens 
-            SET played = ?, percent_played = ?, signal = ?
-            WHERE id = ?
-        """,
-            (played, percent_played, signal, existing[0]),
-        )
-        # print(f"[UPDATE] {song['user_id']} | {song['title']} | {percent_played}%")
-
-    else:
-        cursor.execute(
             """
                 INSERT INTO listens(
                 song_id, title, artist, album, genre, duration, played, percent_played, signal, user_id
@@ -243,6 +242,7 @@ def log_history(song):
 
     conn.commit()
     conn.close()
+    push_star(song, signal)
 
 
 def autoSyncWithFallback():

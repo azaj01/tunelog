@@ -324,12 +324,12 @@ def build_playlist(
     remaining = 1 - unheard_pct - wildcard_pct
 
     slots = {
-        "unheard": max(1, round(n * unheard_pct)),
-        "wildcard": max(1, round(n * wildcard_pct)),
-        "positive": max(1, round(n * remaining * slotsValue['positive'])),
-        "repeat": max(1, round(n * remaining * slotsValue['repeat'])),
-        "partial": max(1, round(n * remaining * slotsValue['partial'])),
-        "skip": max(1, round(n * remaining * slotsValue['skip'])),
+        "unheard": max(0, round(n * unheard_pct)),
+        "wildcard": max(0, round(n * wildcard_pct)),
+        "positive": max(0, round(n * remaining * slotsValue['positive'])),
+        "repeat": max(0, round(n * remaining * slotsValue['repeat'])),
+        "partial": max(0, round(n * remaining * slotsValue['partial'])),
+        "skip": max(0, round(n * remaining * slotsValue['skip'])),
     }
 
     def by_signal(signal, conn):
