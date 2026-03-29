@@ -2,7 +2,7 @@
 
 import requests
 from config import Navidrome_url , login , event_queue
-# from config import 
+# from config import
 
 
 def start_sse():
@@ -13,7 +13,7 @@ def start_sse():
     # print(response.status_code)
     # print("In watcher with response : ")
     # print(response.headers)
-    
+
     event_type = None
     for line in response.iter_lines(decode_unicode=True):
         # print(line)
@@ -30,3 +30,43 @@ def start_sse():
             # print(f"EVENT: {event_type} → {data}")
 
 
+# {
+#     "Desi": ["indian pop", "regional indian", "folk", "indian folk"],
+#     "Punjabi": ["punjabi pop", "punjabi", "punjabi r&b"],
+#     "Default": [
+#         "default",
+#         "soundtrack",
+#         "singer,songwriter",
+#         "boom bap",
+#         "classique",
+#         "darksynth",
+#     ],
+#     "Bollywood": ["bollywood"],
+#     "Bhojpuri": ["Bhojpuri"],
+#     "Bhangra": ["bhangra"],
+#     "worldwide": ["worldwide"],
+#     "rap": ["Old School Rap", "rap"],
+#     "hip hop": ["hip-hop,rap", "hip-hop", "Hip-Hop/Rap"],
+#     "filmi": ["filmi"],
+#     "pop": ["pop", "indie pop"],
+#     "rnb": ["rnb,soul"],
+#     "rock": ["rock", "hard rock"],
+#     "islamic": ["islamic", "musique indienne"],
+#     "new age": ["New Age"],
+#     "metal": ["metal"],
+#     "dance": ["dance"],
+#     "Bengali": ["bangla", "bengali", "bangla rock"],
+#     "country": ["country"],
+#     "vocal": ["Vocal"],
+#     "house": ["house"],
+#     "Blues": ["blues"],
+#     "children Music": ["Children's Music"],
+#     "sufi": ["sufi", "farsi"],
+#     "asia": ["asia"],
+#     "alternative": ["alternative", "alternative pop"],
+#     "techno": ["techno"],
+#     "motivational": ["devotional & spiritual", "inspirational"],
+#     "tollywood": ["tollywood", "tamil"],
+#     "electronic": ["electronica", "electronic"],
+#     "classical": ["classical"],
+# }

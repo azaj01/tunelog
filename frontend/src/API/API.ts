@@ -182,13 +182,28 @@ export interface ManualMarkingSong {
   explicit: string | null;
 }
 
-
 export interface FallbackSyncStatus {
   status: string;
   is_running: boolean;
   processed: number;
   total: number;
   progress: number;
+}
+
+export interface GenreResponse {
+  status: string;
+  Genre: Record<string, string[]>;
+}
+
+export interface GenreListResponse {
+  status: string;
+  genres: string[];
+}
+
+export interface AutoMatchResponse {
+  status: string;
+  genres: string[];
+  "genre Updated": number;
 }
 
 export type ExplicitTag = "explicit" | "cleaned" | "notExplicit";
@@ -227,11 +242,10 @@ export async function fetchSyncStop(): Promise<SyncStopResponse> {
   return res.json();
 }
 
-
 export async function fetchSyncSettings(
   autoSyncHour: number,
   useItunes: boolean,
-  timezone: string = "Asia/Kolkata", 
+  timezone: string = "Asia/Kolkata",
 ): Promise<{ status: string }> {
   const res = await fetch(
     `${BASE_URL}/api/sync/setting?auto_sync_hour=${autoSyncHour}&use_itunes=${useItunes}&timezone=${encodeURIComponent(timezone)}`,
@@ -239,8 +253,6 @@ export async function fetchSyncSettings(
   if (!res.ok) throw new Error("Failed to save settings");
   return res.json();
 }
-
-
 
 export async function fetchLogin(data: LoginRequest): Promise<LoginResponse> {
   const res = await fetch(`${BASE_URL}/auth/login`, {
@@ -397,7 +409,6 @@ export async function updateExplicitTag(
   return res.json();
 }
 
-
 export async function startFallbackSync(
   tries: number = 500,
 ): Promise<{ status: string; total?: number; reason?: string }> {
@@ -422,4 +433,56 @@ export async function stopFallbackSync(): Promise<{ status: string }> {
   return res.json();
 }
 
+export async function fetchGenres(): Promise<GenreResponse> {
+  const res = await fetch(`${BASE_URL}/api/genre/read`);
+  if (!res.ok) throw new Error("Failed to fetch genres");
+  return res.json();
+}
 
+export async function writeGenre(
+  genre: string,
+  noisyGenre: string,
+): Promise<GenreResponse> {
+  const res = await fetch(
+    `${BASE_URL}/api/genre/write?genre=${encodeURIComponent(
+      genre,
+    )}&noisyGenre=${encodeURIComponent(noisyGenre)}`,
+  );
+
+  if (!res.ok) throw new Error("Failed to write genre");
+
+  return res.json();
+}
+
+export async function deleteGenre(
+  category: string,
+  value?: string,
+): Promise<GenreResponse> {
+  let url = `${BASE_URL}/api/genre/delete?category=${encodeURIComponent(
+    category,
+  )}`;
+
+  if (value) {
+    url += `&value=${encodeURIComponent(value)}`;
+  }
+
+  const res = await fetch(url);
+
+  if (!res.ok) throw new Error("Failed to delete genre");
+
+  return res.json();
+}
+
+export async function fetchGenresFromDb(): Promise<GenreListResponse> {
+  const res = await fetch(`${BASE_URL}/api/genre/get`);
+
+  if (!res.ok) throw new Error("Failed to fetch genres from DB");
+
+  return res.json();
+}
+
+export async function autoMatchGenres(): Promise<AutoMatchResponse> {
+  const res = await fetch(`${BASE_URL}/api/genre/auto`);
+  if (!res.ok) throw new Error("Failed to auto match genres");
+  return res.json();
+}

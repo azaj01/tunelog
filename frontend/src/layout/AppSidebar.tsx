@@ -45,6 +45,11 @@ const navItems: NavItem[] = [
     icon: <ListIcon />,
     path: "/manual",
   },
+  {
+    name: "Genre Matching",
+    icon: <ListIcon />,
+    path: "/genre",
+  },
 ];
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();

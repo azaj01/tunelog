@@ -10,6 +10,7 @@ import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
 import UserProfilePage from "./pages/userProfile";
 import ManualMarking from "./pages/manualMark";
+import GenreMatch from "./pages/genreMatching";
 export default function App() {
   return (
     <>
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/playlist" element={<Playlist />} />
             <Route path="/users/:username" element={<UserProfilePage />} />
             <Route path="/manual" element={<ManualMarking />} />
+            <Route path="/genre" element={<GenreMatch />} />
           </Route>
 
           <Route path="/signin" element={<SignIn />} />

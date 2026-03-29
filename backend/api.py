@@ -27,6 +27,10 @@ from playlist import (
 )
 import library
 from itunesFuzzy import useFallBackMethods
+
+from genre import readJson, writeJson, DeleteDataJson , autoGenre
+from misc import UpdateDBgenre
+
 from threading import Thread
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -88,6 +92,33 @@ class UpdateMarkingPayload(BaseModel):
 
 
 VALID_EXPLICIT = {"explicit", "cleaned", "notExplicit"}
+
+
+def GetGenre():
+
+    conn = get_db_connection_lib()
+    cursor = conn.cursor()
+    rows = cursor.execute(
+        "SELECT DISTINCT genre FROM library WHERE explicit IS NOT NULL"
+    ).fetchall()
+    conn.close()
+
+    db_genres = [row[0] for row in rows]
+
+    data = readJson()
+    known_terms = set()
+
+    for category, values in data.items():
+        known_terms.add(category.lower())  
+        for v in values:
+            known_terms.add(v.lower())
+
+    unmapped_genres = [g for g in db_genres if g and g.lower() not in known_terms]
+
+    return {
+        "status": "success",
+        "genres": unmapped_genres,
+    }
 
 
 # ping
@@ -854,7 +885,6 @@ def getMonthlyListens():
     conn.close()
     return [{"month": row[0], "count": row[1]} for row in rows]
 
-# module-level state (same pattern as library._isSyncing)
 _fallbackRunning = False
 _fallbackProcessed = 0
 _fallbackTotal = 0
@@ -923,6 +953,73 @@ def stopFallback():
     global _fallbackStop
     _fallbackStop = True
     return {"status": "ok"}
+
+
+@app.get("/api/genre/read")
+def readGenre():
+    print("Request recived to read data from json")
+    data = readJson()
+    # print(data)
+    # autoGenre(data)
+    return {
+        "status" : "success",
+        "Genre" : data
+    }
+
+
+@app.get("/api/genre/write")
+def writeGenre(genre , noisyGenre):
+
+    try:
+        if genre and noisyGenre:
+            print("writng")
+            data = writeJson(genre, noisyGenre)
+            genreData = readJson()
+            # update = UpdateDBgenre(genre , noisyGenre)
+            # print(update)
+            autoGenre(genreData)
+            return {
+                "status" : "success",
+                "Genre" : data
+            }
+        else :
+            return{
+                "status" : "Category Or Genre Empty"
+            }
+    except:
+        return {
+            "status" : "Error in writing data"
+        }
+
+
+@app.get("/api/genre/delete")
+def deleteGenre(category , value=None):
+    if category:
+        data =  DeleteDataJson(category , value )
+        return {
+            "status" : "success",
+            "Genre" : data
+        }
+    else:
+        return {
+            "status" : "Deletion Failed, Caterogy is required"
+        }
+
+
+@app.get("/api/genre/get")
+def GetGenreFromDb():
+    data = GetGenre()
+    return data
+
+
+@app.get("/api/genre/auto")
+def autoMatchGenre():
+    print("Auto match Request Recived")
+    data = readJson()
+    update = autoGenre(data) 
+    remaining_data = GetGenre()
+
+    return {"unmapped": remaining_data, "genre_updated": update}
 
 
 if __name__ == "__main__":

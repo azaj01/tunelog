@@ -16,10 +16,36 @@
 # - dont take data if its older then 2 months,
 
 
+# Issues : the song's final score can be infinte, it will take ages to make it down,
+# fix : take the last 15 song intreaction, max score = +3 and min = -2
+
+# ISSUES : taking last 15 intreaction creates ineffiency if the user has listened to same song 15 times a day, the 1st intreaction and 15th has same weightage
+# fix :  transistiong from times decay to  index
+
+# tunelog-backend   | song :  Ranjha rating :  3.0 signal :  repeat     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  3.0 signal :  repeat     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  2.0 signal :  positive     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  2.0 signal :  positive     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+# tunelog-backend   | song :  Ranjha rating :  -2.0 signal :  skip     |   weightage :  1.0
+
+
+# ISSUES : DATABASE IS LOCKEd
+# FIX : executemany()
+
+
 from config import build_url_for_user, getAllUser
 import requests
-from db import get_db_connection
-
+from db import get_db_connection , get_db_connection_lib
 
 
 import sqlite3
@@ -42,45 +68,50 @@ def push_star(song, signal):
     conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-
     rows = cursor.execute(
-        "SELECT * FROM listens WHERE user_id = ? AND song_id = ?", (user_id, song_id)
+        """
+    SELECT * FROM listens 
+    WHERE user_id = ? AND song_id = ? 
+    ORDER BY timestamp DESC 
+    LIMIT 15
+    """,
+        (user_id, song_id),
     ).fetchall()
-
     totalListens = len(rows)
     if totalListens < 3:
         print(f"Song: {song['title']} needs at least 3 listens")
-        conn.close() 
+        conn.close()
         return
 
     totalWeight = 0
     rowSongScore = 0
 
-    for row in rows:
+    for i, row in enumerate(rows):
         hisTimeStamp = row["timestamp"]
-        try:
-            rowDt_object = datetime.strptime(hisTimeStamp, format_str)
-        except ValueError:
-            continue  
+        # try:
+        #     rowDt_object = datetime.strptime(hisTimeStamp, format_str)
+        # except ValueError:
+        #     continue
 
-
-        timeDifference = now - rowDt_object
-        days_diff = abs(timeDifference.days)
-
-        if days_diff > 60:
-            continue  
-        
-        weightage = 0.9**days_diff
+        weightage = 0.9** i 
 
         rowSignal = row["signal"]
-        rating = star_map.get(rowSignal, 0)
-        # print("song : " ,  song['title'] , "rating : ", rating , "signal : " , rowSignal , "weightage : " , weightage)
         
+        rating = star_map.get(rowSignal, 0)
+        
+        print(
+            "song : ",
+            song["title"],
+            "rating : ",
+            rating,
+            "signal : ",
+            rowSignal,
+            "    |  ",
+            "weightage : ",
+            weightage,
+            " | Index : , " , i
+        )
         rowSongScore += rating * weightage
-
-        if (timeDifference.total_seconds() / 60) <= 30:
-            rowSongScore += 3
-
         totalWeight += weightage
 
     if totalWeight <= 0:
@@ -101,10 +132,9 @@ def push_star(song, signal):
     else:
         final_rating = 1
 
-    # print(f"Final score for {song['title']}: {final_rating}")
+    print(f"Final score for {song['title']}: {final_rating}")
 
     conn.close()
-
 
     USER_CREDENTIALS = getAllUser()
     password = USER_CREDENTIALS.get(user_id)
@@ -121,3 +151,35 @@ def push_star(song, signal):
     except Exception as e:
         print(f"[STAR ERROR] {user_id} | {e}")
 
+
+def UpdateDBgenre(data):
+
+    if data :
+        conn_log = get_db_connection()
+        cursor_log = conn_log.cursor()
+        conn_lib = get_db_connection_lib()
+        cursor_lib = conn_lib.cursor()
+
+        cursor_log.executemany(
+            "UPDATE listens SET genre = ? WHERE genre = ?", (data)
+        )
+
+        cursor_lib.executemany(
+            "UPDATE library SET genre = ? WHERE genre = ?", (data)
+        )
+
+        conn_lib.commit()
+        conn_log.commit()
+        conn_lib.close()
+        conn_log.close()
+
+        return {
+            "status" : "success",
+            "updated Rows  lib" : cursor_lib.rowcount,
+            "updated rows log" : cursor_log.rowcount
+        }
+    
+    else:
+        return { 
+            "status" : "Caterory or value is empty"
+        }

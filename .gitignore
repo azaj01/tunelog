@@ -83,3 +83,6 @@ dist-ssr
 
 # linux directories metadata
 .directory
+
+
+genre.json
