@@ -96,9 +96,9 @@ def push_star(song, signal):
         weightage = 0.9** i 
 
         rowSignal = row["signal"]
-        
+
         rating = star_map.get(rowSignal, 0)
-        
+
         print(
             "song : ",
             song["title"],
@@ -152,34 +152,38 @@ def push_star(song, signal):
         print(f"[STAR ERROR] {user_id} | {e}")
 
 
-def UpdateDBgenre(data):
+def UpdateDBgenre(data, connLib=None):
+    print("In update db genre")
+    if not data:
+        return {"status": "Category or value is empty"}
+    conn_log = get_db_connection()
+    cursor_log = conn_log.cursor()
 
-    if data :
-        conn_log = get_db_connection()
-        cursor_log = conn_log.cursor()
-        conn_lib = get_db_connection_lib()
-        cursor_lib = conn_lib.cursor()
-
-        cursor_log.executemany(
-            "UPDATE listens SET genre = ? WHERE genre = ?", (data)
-        )
-
-        cursor_lib.executemany(
-            "UPDATE library SET genre = ? WHERE genre = ?", (data)
-        )
-
-        conn_lib.commit()
-        conn_log.commit()
-        conn_lib.close()
-        conn_log.close()
-
-        return {
-            "status" : "success",
-            "updated Rows  lib" : cursor_lib.rowcount,
-            "updated rows log" : cursor_log.rowcount
-        }
-    
+    if connLib:
+        conn_lib = connLib
+        close_lib = False  
     else:
-        return { 
-            "status" : "Caterory or value is empty"
-        }
+        conn_lib = get_db_connection_lib()
+        close_lib = True
+
+    cursor_lib = conn_lib.cursor()
+    # print("Updates to make : " , data)
+    cursor_log.executemany("UPDATE listens SET genre = ? WHERE genre = ?", data)
+
+    cursor_lib.executemany("UPDATE library SET genre = ? WHERE genre = ?", data)
+
+    conn_log.commit()
+    print("update made")
+    if close_lib:
+        conn_lib.commit()
+        conn_lib.close()
+    else:
+        conn_lib.commit() 
+
+    conn_log.close()
+
+    return {
+        "status": "success",
+        "updated Rows lib": cursor_lib.rowcount,
+        "updated rows log": cursor_log.rowcount,
+    }

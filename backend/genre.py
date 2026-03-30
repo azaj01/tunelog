@@ -48,12 +48,19 @@ FILE_PATH = "./data/genre.json"
 def writeJson(genre, noisyGenre):
     try:
         with open(FILE_PATH, "r") as file:
-            oldData = json.load(file)
-    except FileNotFoundError:
+
+            raw_data = json.load(file)
+            oldData = {
+                k.lower(): [v.lower() for v in values] for k, values in raw_data.items()
+            }
+    except (FileNotFoundError, json.JSONDecodeError):
         oldData = {}
 
-    genre = genre.title()
+  
+    genre = genre.lower()
+    noisyGenre = noisyGenre.lower()
 
+    
     for values in oldData.values():
         if noisyGenre in values:
             return oldData
@@ -61,10 +68,12 @@ def writeJson(genre, noisyGenre):
     if genre not in oldData:
         oldData[genre] = []
 
+   
     oldData[genre].append(noisyGenre)
 
+   
     with open(FILE_PATH, "w") as file:
-        json.dump(oldData, file)
+        json.dump(oldData, file, indent=4)  
 
     return oldData
 
@@ -111,11 +120,13 @@ def DeleteDataJson(category, value = None):
 
 
 def score(input , output):
-    t_score = fuzz.token_set_ratio(input, output)
+    t_score = round(fuzz.token_sort_ratio(input.lower(), output.lower()))
     return round(t_score )
 
 
-def autoGenre(data):
+# changing autogenre just to write in json
+
+def autoGenre(data = readJson()):
     conn_lib = get_db_connection_lib()
     cursor = conn_lib.cursor()
     distinctGenre = cursor.execute(
@@ -141,33 +152,89 @@ def autoGenre(data):
         best_match = None
 
         for category, values in data.items():
+            cat_lower = category.lower()
+            genre_lower = genre1.lower()
+
+            if len(cat_lower) > 3: #
+                if cat_lower in genre_lower:
+                    best_match = category
+                    best_score = 100 
+                    break
 
             cat_score = score(category, genre1)
             if cat_score > best_score:
                 best_score = cat_score
                 best_match = category
 
-
             for value in values:
                 v_score = score(value, genre1)
+
+                if len(value) > 3 and value.lower() in genre_lower:
+                    best_score = 100
+                    best_match = category
+                    break
+
                 if v_score > best_score:
                     best_score = v_score
                     best_match = category
 
             if best_score == 100:
                 break
-
         if best_match and best_score >= 95:
             print(f"Auto-Mapping Found: {genre1} -> {best_match} ({best_score}%)")
 
             mapping.append((best_match, genre1))
 
-
             writeJson(best_match, genre1)
 
     if mapping:
         print(f"Starting bulk update for : {len(mapping)} Genres")
-        db_result = UpdateDBgenre(mapping)
-        return {"updated_count": len(mapping), "db_status": db_result}
+        # db_result = UpdateDBgenre(mapping)
+        return {"updated_count": len(mapping)}
 
     return {"status": "No changes needed", "updated_count": 0}
+
+
+# data = readJson()
+
+# update = autoGenre(data)
+
+# print(update)
+
+
+def sync_database_to_json():
+    print("Syncing Genre to Mapped genre")
+    data = readJson()
+
+    conn_lib = get_db_connection_lib()
+    cursor = conn_lib.cursor()
+
+    genres = cursor.execute("SELECT DISTINCT genre FROM library").fetchall()
+
+    conn_lib.close()
+
+    genre_set = {g[0].strip().lower() for g in genres if g[0]}
+
+    updates_to_make = []
+
+    for category, values in data.items():
+        category_clean = category.strip().lower()
+
+        for value in values:
+            value_clean = value.strip().lower()
+
+            if value_clean == category_clean:
+                continue
+
+            if value_clean not in genre_set:
+                continue
+
+            updates_to_make.append((category_clean, value_clean))
+
+    if updates_to_make:
+        print(f"Syncing DB: Found {len(updates_to_make)} mappings to enforce.")
+        # print("Update to makes :", updates_to_make)
+        return UpdateDBgenre(updates_to_make)
+    else:
+        return {"status": "Database already matches JSON categories"}
+# sync_database_to_json()

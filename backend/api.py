@@ -28,7 +28,7 @@ from playlist import (
 import library
 from itunesFuzzy import useFallBackMethods
 
-from genre import readJson, writeJson, DeleteDataJson , autoGenre
+from genre import readJson, writeJson, DeleteDataJson , autoGenre , sync_database_to_json
 from misc import UpdateDBgenre
 
 from threading import Thread
@@ -1017,6 +1017,7 @@ def autoMatchGenre():
     print("Auto match Request Recived")
     data = readJson()
     update = autoGenre(data) 
+    sync_database_to_json()
     remaining_data = GetGenre()
 
     return {"unmapped": remaining_data, "genre_updated": update}
