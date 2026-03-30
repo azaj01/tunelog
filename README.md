@@ -98,6 +98,18 @@ TuneLog/
 ├── frontend/            # React + TypeScript + Vite (TailAdmin based)
 └── compose.yaml         # Docker orchestration
 ```
+### **Auto Genre Match**
+Added a option to match genre automatically, this is needed for better genre injection of songs, if there is a messy genre in db, song recommended becomes in accurate.
+- Currently there is no option for multiple genre like `rap, hip hop`
+- you can create a category genre and map noisy genre in it,
+- The Auto match features take the noisy genre and its data and matches it against genre in db, the one with heightest score gets added in Genre.json file
+- you can get a sample genre from `architecture.md`
+- If there is data in genre.json, when doing library sync, it will automatically change the matching genre to the category genre
+
+
+
+
+
 
 ---
 
