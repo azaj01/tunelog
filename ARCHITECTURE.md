@@ -48,7 +48,7 @@ This document outlines the technical architecture, data flow, and design decisio
 - [Data Flow](#data-flow)
 - [The Ghost Flush Mechanism](#the-ghost-flush-mechanism)
 - [Signal System](#signal-system)
-- [Genre Normalisation Pipeline](#genre-normalisation-pipeline)
+- [Auto Genre Match](#auto-genre-match)
 - [Genre Injection](#genre-injection)
 - [Playlist Slot System](#playlist-slot-system)
 - [Timezone Safety](#timezone-safety)
@@ -124,7 +124,7 @@ Recent listens are weighted higher. A repeat yesterday outweighs a repeat from 3
 
 ---
 
-## Genre Normalisation Pipeline
+## Auto Genre Match
 
 ### The Problem: Inconsistent Metadata
 Navidrome stores genre tags exactly as embedded in audio files. This means the same genre can appear as `BOLLYWOOD`, `Bollywood Music`, `Hindi OST`, `Indian`, or `Фильмы` — all treated as separate genres, causing genre injection to miss matches entirely.
@@ -132,32 +132,219 @@ Navidrome stores genre tags exactly as embedded in audio files. This means the s
 Additionally, songs tagged with multiple genres like `Bollywood/Rap` were stored as one string, never matching either genre pool.
 
 ### The Solution
-Every genre string passes through `normalise_genre()` at ingest time in both `library.py` and `main.py`:
+Every genre string passes through `autoGenreMatch()` It takes pre existing genre category in `genre.json` , and uses fuzzy matching on `Distinct Genre` from database, when score is heigher then 95 it stores it in `genre.json` . After that ` sync_database_to_json()` updates it in database
 
-1. Lowercase + strip whitespace
-2. Split on `/` → handle multi-genre tags
-3. Map through `GENRE_ALIASES` dict → collapse variants to canonical names
-4. Unknown genres pass through as-is (never silently dropped)
-5. Store as comma-separated string e.g. `"bollywood,rap"`
-```python
-GENRE_ALIASES = {
-    "bollywood music": "bollywood",
-    "hindi": "bollywood",
-    "hindi ost": "bollywood",
-    "indian": "bollywood",
-    "bandes originales de films": "soundtrack",
-    "filme": "soundtrack",
-    "films": "soundtrack",
-    "ost": "soundtrack",
-    "hip hop": "rap",
-    "поп": "pop",
-    "hits": "pop",
-    "compilation": "pop",
-    "musiques du monde": "world",
-    "r&b": "rnb",
-    "quran recitation": "quran",
-    "bengali movie music": "bengali",
-    "фильмы": "soundtrack",
+- currently there is no implementation of multiple genre tags like `rap, hip hop` because i dont know how to.
+
+  **Here is the my genre.json** create `genre.json` in `data` folder and paste this before runing docker container, as docker marks data as root folder and it wont let you write in it.
+```JSON
+{
+    "desi": [
+        "indian pop",
+        "regional indian",
+        "folk",
+        "indian folk",
+        "folk pop",
+        "indie folk",
+        "alternative folk",
+        "hindi ost"
+    ],
+    "punjabi": [
+        "punjabi pop",
+        "punjabi",
+        "punjabi r&b",
+        "punjabi r&b "
+    ],
+    "default": [
+        "default",
+        "soundtrack",
+        "singer,songwriter",
+        "boom bap",
+        "classique",
+        "darksynth",
+        "film soundtrack",
+        "hindi soundtrack",
+        "tv soundtrack",
+        "soundtrack,games",
+        "0",
+        "uk drill",
+        "singer-songwriter",
+        "trap",
+        "downtempo",
+        "funk",
+        "singer",
+        "various",
+        "club",
+        "jazz",
+        "ambient"
+    ],
+    "bollywood": [
+        "bollywood",
+        "bollywood music",
+        "hindi"
+    ],
+    "bhojpuri": [
+        "bhojpuri"
+    ],
+    "bhangra": [
+        "bhangra"
+    ],
+    "worldwide": [
+        "worldwide"
+    ],
+    "rap": [
+        "old school rap",
+        "rap",
+        "pop rap"
+    ],
+    "hip hop": [
+        "hip-hop,rap",
+        "hip-hop",
+        "hip-hop/rap",
+        "southern hip hop",
+        "rap,hip hop"
+    ],
+    "filmi": [
+        "filmi",
+        "filme",
+        "filme,videospiele",
+        "films",
+        "films,games"
+    ],
+    "pop": [
+        "pop",
+        "indie pop",
+        "alternative pop",
+        "dream pop",
+        "art pop",
+        "synth-pop"
+    ],
+    "rnb": [
+        "rnb,soul",
+        "contemporary r&b",
+        "r&b"
+    ],
+    "rock": [
+        "rock",
+        "hard rock",
+        "progressive rock",
+        "indie rock",
+        "pop rock"
+    ],
+    "islamic": [
+        "islamic",
+        "musique indienne"
+    ],
+    "new age": [
+        "new age"
+    ],
+    "metal": [
+        "metal"
+    ],
+    "dance": [
+        "dance",
+        "dance-pop"
+    ],
+    "bengali": [
+        "bangla",
+        "bengali",
+        "bangla rock"
+    ],
+    "country": [
+        "country",
+        "country pop"
+    ],
+    "vocal": [
+        "vocal"
+    ],
+    "house": [
+        "house",
+        "future house",
+        "electro house"
+    ],
+    "blues": [
+        "blues"
+    ],
+    "children music": [
+        "children's music"
+    ],
+    "sufi": [
+        "sufi",
+        "farsi",
+        "ghazals",
+        "ghazal"
+    ],
+    "asia": [
+        "asia",
+        "asian music"
+    ],
+    "alternative": [
+        "alternative",
+        "alternative r&b",
+        "alternative rap"
+    ],
+    "techno": [
+        "techno"
+    ],
+    "motivational": [
+        "devotional & spiritual",
+        "inspirational"
+    ],
+    "tollywood": [
+        "tollywood",
+        "tamil"
+    ],
+    "electronic": [
+        "electronica",
+        "electronic",
+        "electro"
+    ],
+    "classical": [
+        "classical"
+    ],
+    "indian": [
+        "hindustani classical",
+        "indian music"
+    ],
+    "soundtrack": [
+        "soundtrack,videospiele"
+    ],
+    "african": [
+        "african music",
+        "afrobeats",
+        "afro-pop"
+    ],
+    "world": [
+        "world",
+        "world music"
+    ],
+    "other": [
+        "other",
+        "\u0438\u043d\u0434\u0438\u0439\u0441\u043a\u0430\u044f \u043c\u0443\u0437\u044b\u043a\u0430",
+        "soul",
+        "music",
+        "christmas music",
+        "ballad",
+        "christian",
+        "musiques du monde",
+        "compilation",
+        "\u043f\u043e\u043f"
+    ],
+    "workout": [
+        "fitness & workout"
+    ],
+    "karaoke": [
+        "karaoke"
+    ],
+    "disco": [
+        "disco"
+    ],
+    "international": [
+        "international"
+    ],
+    "intrumental": [
+        "instrumental"
+    ]
 }
 ```
 
