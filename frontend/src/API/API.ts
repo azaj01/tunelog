@@ -380,11 +380,12 @@ export async function fetchPlaylistGenerate(
   size: number = 50,
   slots?: Record<string, number>,
   weights?: Record<string, number>,
+  injection:Boolean = true
 ): Promise<PlaylistGenerateResponse> {
   const res = await fetch(`${BASE_URL}/api/playlist/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, explicit_filter, size, slots, weights }),
+    body: JSON.stringify({ username, explicit_filter, size, slots, weights , injection}),
   });
   if (!res.ok) throw new Error("Failed to generate playlist");
   return res.json();
@@ -396,12 +397,13 @@ export async function appendPlaylist(
   size: number = 50,
   slots?: Record<string, number>,
   weights?: Record<string, number>,
+  injection: Boolean = true
 ): Promise<PlaylistGenerateResponse> {
   try {
     const res = await fetch(`${BASE_URL}/api/playlist/append`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, explicit_filter, size, slots, weights }),
+      body: JSON.stringify({ username, explicit_filter, size, slots, weights , injection}),
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     return res.json();

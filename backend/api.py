@@ -91,6 +91,7 @@ class PlaylistOptions(BaseModel):
     size: int = 50
     slots: Optional[dict] = None     
     weights: Optional[dict] = None   
+    injection : bool
 
 
 class UpdateMarkingPayload(BaseModel):
@@ -637,6 +638,8 @@ def generatePlaylist(data: PlaylistOptions):
     username = data.username
     explicit_filter = data.explicit_filter
     size = data.size
+    injection = data.injection
+    print("genre injection : " , injection)
     try:
         if data.slots:
             songSlots(data.slots)
@@ -653,7 +656,7 @@ def generatePlaylist(data: PlaylistOptions):
         unheard, unheard_ratio = get_unheard_songs(scores)
         wildcards = get_wildcard_songs(scores, username)
         playlist, song_signals = build_playlist(
-            scores, unheard, wildcards, unheard_ratio, username, explicit_filter, size
+            scores, unheard, wildcards, unheard_ratio, username, explicit_filter, size , injection
         )
         push_playlist(playlist, username, song_signals)
 

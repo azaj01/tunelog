@@ -285,6 +285,7 @@ export default function Playlist() {
               playlistSize,
               activeSlots,
               activeWeights,
+              genreInjection
             )
           : await appendPlaylist(
               selectedUser,
@@ -292,6 +293,7 @@ export default function Playlist() {
               playlistSize,
               activeSlots,
               activeWeights,
+              genreInjection
             );
 
       if (res.status === "ok") {

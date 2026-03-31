@@ -309,6 +309,7 @@ def build_playlist(
     user_id,
     explicit_filter="allow_cleaned",
     n=PLAYLIST_SIZE,
+    injection = True
 ):
 
     playlist_ids = []
@@ -318,9 +319,14 @@ def build_playlist(
 
     allowed_ids = get_allowed_song_ids(explicit_filter)
 
-    unheard_pct = min(0.35, unheard_ratio)     
-    wildcard_pct = 0.08
-    remaining = 1 - unheard_pct - wildcard_pct
+    if injection:
+        unheard_pct = min(0.35, unheard_ratio)
+        wildcard_pct = 0.08
+        remaining = 1 - unheard_pct - wildcard_pct
+    else :
+        unheard_pct = min(0, unheard_ratio)
+        wildcard_pct = 0
+        remaining = 1 - unheard_pct - wildcard_pct
 
     slots = {
         "unheard": max(0, round(n * unheard_pct)),
@@ -330,18 +336,21 @@ def build_playlist(
         "partial": max(0, round(n * remaining * slotsValue['partial'])),
         "skip": max(0, round(n * remaining * slotsValue['skip'])),
     }
-
+    print(slots)
     def by_signal(signal, conn):
         rows = conn.execute(
             "SELECT DISTINCT song_id FROM listens WHERE signal = ? AND user_id = ?",
             (signal, user_id),
         ).fetchall()
         return [r[0] for r in rows if r[0] in allowed_ids]
-
-    genre_distribution = get_genre_distribution(user_id)
-    genre_unheard = get_unheard_by_genre_weighted(
-        set(scores.keys()), genre_distribution, slots["unheard"]
-    )
+    if injection:
+        genre_distribution = get_genre_distribution(user_id)
+        genre_unheard = get_unheard_by_genre_weighted(
+            set(scores.keys()), genre_distribution, slots["unheard"]
+        )
+    else:
+        genre_distribution = get_genre_distribution(user_id)
+        genre_unheard = []
 
     conn_log = get_db_connection()
     pools = [
@@ -360,12 +369,14 @@ def build_playlist(
         ("skip", by_signal("skip", conn_log)),
     ]
 
+    # print("pools : " , pools)
+
     for category, pool in pools:
         if not pool:
             continue
 
         needed = slots.get(category, 0)
-        if category == "unheard":
+        if category == "unheard" and injection:
             candidates = random.sample(pool, min(len(pool), needed * 2))
         else:
             candidates = weighted_sample(pool, scores, needed * 2)
@@ -384,7 +395,7 @@ def build_playlist(
         all_lib = [
             r[0]
             for r in conn.execute("SELECT song_id FROM library").fetchall()
-            if r[0] in allowed_ids 
+            if r[0] in allowed_ids
         ]
         conn.close()
         random.shuffle(all_lib)
@@ -403,6 +414,7 @@ def build_playlist(
 
     random.shuffle(playlist_ids)
     return playlist_ids[:n], song_signals
+
 
 
 def createPlaylistIfDeleteByNavidrome(base_url , name , data , user_id):
@@ -433,7 +445,6 @@ def createPlaylistIfDeleteByNavidrome(base_url , name , data , user_id):
     except Exception as e:
         print(f"[ERROR] Failed to recreate playlist: {e}")
         return
-
 
 
 def push_playlist(song_ids, user_id, song_signals, playname=None, newPlaylist=False):
@@ -767,4 +778,3 @@ def API_push_playlist(song_ids, user_id, playname="New CSV Playlist"):
     except Exception as e:
         print(f"[ERROR] Connection failed: {e}")
         return False
-
