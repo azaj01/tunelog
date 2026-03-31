@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import PageBreadcrumb from "../components/common/PageBreadCrumb";
 import PageMeta from "../components/common/PageMeta";
 import { Modal } from "../components/ui/modal";
@@ -13,14 +13,19 @@ import {
   ImportResponse,
 } from "../API/API";
 
-// function getAdminCredentials() {
-//   const storage = localStorage.getItem("tunelog_user")
-//     ? localStorage
-//     : sessionStorage;
-//   return {
-//     username: storage.getItem("tunelog_user") ?? "",
-//   };
-// }
+function getUsersFromCache(): string[] {
+  try {
+    const raw = localStorage.getItem("tunelog_users_cache");
+    if (raw) {
+      const parsed = JSON.parse(raw) as { username: string }[];
+      return parsed.map((u) => u.username);
+    }
+  } catch {}
+  const fallback =
+    localStorage.getItem("tunelog_user") ??
+    sessionStorage.getItem("tunelog_user");
+  return fallback ? [fallback] : [];
+}
 
 export default function Import() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -33,7 +38,33 @@ export default function Import() {
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState("");
 
+  const [allUsers, setAllUsers] = useState<string[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+
   const { isOpen, openModal, closeModal } = useModal();
+
+  useEffect(() => {
+    if (isOpen) {
+      const users = getUsersFromCache();
+      setAllUsers(users);
+      setSelectedUsers(users); 
+    }
+  }, [isOpen]);
+
+  const allSelected =
+    selectedUsers.length === allUsers.length && allUsers.length > 0;
+
+  const toggleAllUsers = () => {
+    setSelectedUsers(allSelected ? [] : [...allUsers]);
+  };
+
+  const toggleUser = (username: string) => {
+    setSelectedUsers((prev) =>
+      prev.includes(username)
+        ? prev.filter((u) => u !== username)
+        : [...prev, username],
+    );
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -56,7 +87,7 @@ export default function Import() {
       } else {
         setImportError(result.reason ?? "Import failed.");
       }
-    } catch (e) {
+    } catch {
       setImportError("Something went wrong during import.");
     } finally {
       setImporting(false);
@@ -72,27 +103,32 @@ export default function Import() {
       setCreateMsg("No matched songs to add.");
       return;
     }
+    if (selectedUsers.length === 0) {
+      setCreateMsg("Select at least one user.");
+      return;
+    }
 
     setCreating(true);
     setCreateMsg("");
 
-    // const { username } = getAdminCredentials();
-
     try {
       const res = await fetchCreatePlaylistFromIds({
-        // username,
+        username: selectedUsers,
         song_ids: importResult.data.matched_ids,
         playlist_name: playlistName.trim(),
       });
 
       if (res.status === "success" || res.status === "ok") {
-        setCreateMsg(`✓ Playlist "${playlistName}" created!`);
+        setCreateMsg(
+          `✓ Playlist "${playlistName}" created for ${selectedUsers.length} user(s)!`,
+        );
         setTimeout(() => {
           closeModal();
           setCreateMsg("");
           setPlaylistName("");
           setImportResult(null);
           setSelectedFile(null);
+          setSelectedUsers([]);
           if (fileInputRef.current) fileInputRef.current.value = "";
         }, 1500);
       } else {
@@ -187,10 +223,8 @@ export default function Import() {
         </div>
       </div>
 
-
       <Modal isOpen={isOpen} onClose={closeModal} className="max-w-[680px] m-4">
         <div className="no-scrollbar relative w-full max-w-[680px] overflow-y-auto rounded-3xl bg-white p-6 dark:bg-gray-900 lg:p-10 max-h-[85vh]">
-          {/* Header */}
           <h4 className="text-2xl font-semibold text-gray-800 dark:text-white/90 mb-1">
             Match Results
           </h4>
@@ -277,6 +311,87 @@ export default function Import() {
 
           {matched.length > 0 ? (
             <div className="space-y-4">
+              {allUsers.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                    Create for
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer group">
+                      <div
+                        onClick={toggleAllUsers}
+                        className={`h-4 w-4 rounded flex items-center justify-center border transition-colors cursor-pointer flex-shrink-0
+                          ${
+                            allSelected
+                              ? "bg-brand-500 border-brand-500"
+                              : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                          }`}
+                      >
+                        {allSelected && (
+                          <svg
+                            className="w-2.5 h-2.5 text-white"
+                            fill="none"
+                            viewBox="0 0 10 8"
+                          >
+                            <path
+                              d="M1 4l3 3 5-6"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                        All users
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        ({allUsers.length})
+                      </span>
+                    </label>
+
+                    <div className="ml-1 flex flex-col gap-1.5 pl-3 border-l border-gray-100 dark:border-gray-800">
+                      {allUsers.map((username) => (
+                        <label
+                          key={username}
+                          className="flex items-center gap-2.5 cursor-pointer"
+                        >
+                          <div
+                            onClick={() => toggleUser(username)}
+                            className={`h-4 w-4 rounded flex items-center justify-center border transition-colors cursor-pointer flex-shrink-0
+                              ${
+                                selectedUsers.includes(username)
+                                  ? "bg-brand-500 border-brand-500"
+                                  : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                              }`}
+                          >
+                            {selectedUsers.includes(username) && (
+                              <svg
+                                className="w-2.5 h-2.5 text-white"
+                                fill="none"
+                                viewBox="0 0 10 8"
+                              >
+                                <path
+                                  d="M1 4l3 3 5-6"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                            {username}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <Label>Playlist Name</Label>
                 <Input
@@ -289,11 +404,7 @@ export default function Import() {
 
               {createMsg && (
                 <p
-                  className={`text-sm ${
-                    createMsg.startsWith("✓")
-                      ? "text-green-500"
-                      : "text-red-400"
-                  }`}
+                  className={`text-sm ${createMsg.startsWith("✓") ? "text-green-500" : "text-red-400"}`}
                 >
                   {createMsg}
                 </p>
@@ -306,11 +417,15 @@ export default function Import() {
                 <Button
                   size="sm"
                   onClick={handleCreatePlaylist}
-                  disabled={creating || !playlistName.trim()}
+                  disabled={
+                    creating ||
+                    !playlistName.trim() ||
+                    selectedUsers.length === 0
+                  }
                 >
                   {creating
                     ? "Creating..."
-                    : `Create Playlist (${matched.length} songs)`}
+                    : `Create Playlist (${matched.length} songs${selectedUsers.length > 1 ? `, ${selectedUsers.length} users` : ""})`}
                 </Button>
               </div>
             </div>

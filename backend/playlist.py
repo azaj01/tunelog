@@ -406,8 +406,6 @@ def build_playlist(
     return playlist_ids[:n], song_signals
 
 
-# VERSION 2 OF PUSH PLAYLIST
-
 def createPlaylistIfDeleteByNavidrome(base_url , name , data , user_id):
     try:
         create_url = f"{base_url}&name={name}"
@@ -438,7 +436,7 @@ def createPlaylistIfDeleteByNavidrome(base_url , name , data , user_id):
         return
 
 
-# push playlist v2 :  for csv import 
+# push playlist v2 :  for csv import
 
 def push_playlist(song_ids, user_id, song_signals, playname=None, newPlaylist=False):
     USER_CREDENTIALS = getAllUser()
@@ -597,7 +595,7 @@ def get_all_users():
 
 def appendPlaylist(user_id, password , explicit_filter , size):
 
-    # generate playlist using build playlist 
+    # generate playlist using build playlist
 
     scores = score_song(user_id)
     unheard, unheard_ratio = get_unheard_songs(scores)
@@ -679,7 +677,6 @@ def appendPlaylist(user_id, password , explicit_filter , size):
 
         print(f"[TuneLog] Playlist restored with ID {new_id}")
 
-    
         if not stored_playlist_id or stored_playlist_id == "no users/playlist id":
             new_id = r["subsonic-response"]["playlist"]["id"]
             conn_usr = get_db_connection_usr()
@@ -692,7 +689,6 @@ def appendPlaylist(user_id, password , explicit_filter , size):
     except Exception as e:
         print(f"[ERROR] Navidrome communication failed: {e}")
         return False
-
 
     conn_lib = get_db_connection_lib()
     placeholders = ",".join("?" * len(playlist))
@@ -721,7 +717,6 @@ def appendPlaylist(user_id, password , explicit_filter , size):
                 )
             )
 
-
     conn.executemany(
         """
         INSERT OR IGNORE INTO playlist (username, song_id, title, artist, genre, signal, explicit)
@@ -734,6 +729,47 @@ def appendPlaylist(user_id, password , explicit_filter , size):
 
     print(f"[TuneLog] Append successful for {user_id}")
     return True
+
+
+def API_push_playlist(song_ids, user_id, playname="New CSV Playlist"):
+    USER_CREDENTIALS = getAllUser()
+    password = USER_CREDENTIALS.get(user_id)
+    if not password:
+        print(f"[TuneLog] No credentials found for {user_id}")
+        return False
+    base_url = build_url_for_user("createPlaylist", user_id, password)
+    url = f"{base_url}&name={playname}"
+    payload = [("songId", sid) for sid in song_ids]
+
+    try:
+        print(f"[TuneLog] Sending request to Navidrome for user: {user_id}")
+        response = requests.post(url, data=payload)
+        r_json = response.json()
+
+        if (
+            "subsonic-response" in r_json
+            and r_json["subsonic-response"]["status"] == "ok"
+        ):
+            new_id = r_json["subsonic-response"]["playlist"]["id"]
+            print(
+                f"[TuneLog] Success! Created playlist '{playname}' (ID: {new_id}) for {user_id}"
+            )
+            update_url = build_url_for_user("updatePlaylist", user_id, password)
+            requests.get(f"{update_url}&playlistId={new_id}&public=false")
+
+            return True
+        else:
+            error_msg = (
+                r_json.get("subsonic-response", {})
+                .get("error", {})
+                .get("message", "Unknown API Error")
+            )
+            print(f"[ERROR] Navidrome rejected request: {error_msg}")
+            return False
+
+    except Exception as e:
+        print(f"[ERROR] Connection failed: {e}")
+        return False
 
 
 if __name__ == "__main__":

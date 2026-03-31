@@ -36,7 +36,7 @@ from genre import readJson, writeJson, DeleteDataJson , autoGenre , sync_databas
 from misc import UpdateDBgenre
 from importPlaylist import fuzzymatching
 
-from playlist import push_playlist
+from playlist import API_push_playlist
 
 from threading import Thread
 from fastapi import FastAPI
@@ -99,6 +99,7 @@ class UpdateMarkingPayload(BaseModel):
 
 
 class csvPlaylist(BaseModel):
+    username:list[str]
     song_ids: list[str]
     playlist_name: str
 
@@ -1070,15 +1071,21 @@ async def import_csv(file: UploadFile = File(...)):
 def csvPlaylist(data  : csvPlaylist):
     print(" creating playlist from csv")
     songIdv = data.song_ids
-    name = data.playlist_name
-    print(songIdv)
+    playname = data.playlist_name
+    username = data.username
+    # print(songIdv)
     try:
         if songIdv:
-            push_playlist(songIdv , "adii" , {} , name , True)
+            print(username)
+            for name in username :
+                print("username : " , name)
+                # push_playlist(songIdv , name , {} , playname , True)
+                API_push_playlist(songIdv , name , playname)
             return {
                 "status" : "success"
             }
     except Exception as e:
+        print(e)
         return {
             "status" : e
         }

@@ -228,7 +228,7 @@ export interface ImportResponse {
 }
 
 export interface PlaylistCreateRequest {
-  // username: string;
+  username: string[];
   song_ids: string[];
   playlist_name: string;
 }
