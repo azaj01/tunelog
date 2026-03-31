@@ -13,8 +13,10 @@
 ### 2. Installation (Docker - Recommended)
 >  **Critical:** Docker and manual runs (`python main.py`) are mutually exclusive. Docker marks the `data/` folder as `rootowned`. If you switch between them, run `sudo chown -R $USER:$USER data/` to fix permissions.
 
+### DOCKER
+- This will create two containers, use manual way if you dont want that
+
 ```bash
-# Clone the repository
 git clone https://github.com/adiiverma40/tunelog
 cd tunelog
 
@@ -32,49 +34,55 @@ docker compose up --build
 
 ---
 
-### Manual 
+### Manual
+- Use this if you dont want to run two containers
+
 ```bash
 git clone https://github.com/adiiverma40/tunelog
 cd tunelog
 ```
-
+- Backend
 ```bash
 cd backend
+
+pip install -r requirements.txt
+
 python3 main.py
 ```
-
+- Frontend
 ```bash
 cd frontend
+
+npm install 
+
 npm run dev
 ```
 
 ### .env
 ```bash
-
-
 #Navidrome
-
 #base_url = navidrome ip 
-
-base_url = http://192.168.29.118:4533
+# base_url = http://192.168.29.118:4533 # THIS IS MINE IP ADDRESS
 
 # Admin and password
-
 admin_username = username # (username used while creating navidrome account )
 admin_password = password # (Password used while creating navidrome account)
 
 # vite api url 
 
 # VITE_API_URL=http://localhost:8000
-VITE_API_URL=http://192.168.29.118:8000
+# VITE_API_URL=http://192.168.29.118:8000 # THIS IS MINE 
 
 ```
+- You can get your ip address by doing, `ipconfig` in windows and `ip a` in linux or use `localhost` if its works for you
 
 
 ## How It Works
 TuneLog uses **Implicit Feedback**. Instead of manual ratings, it watches "Signals" via the Navidrome SSE (Server-Sent Events) stream to judge your interest.
 
 ### The Signal System
+- Can Be changed
+
 | Behavior | Signal | Weight | Logic |
 | :--- | :--- | :--- | :--- |
 | **Skipped < 30%** | `skip` | -5 | Heavy penalty; removes from high-rotation. |
@@ -83,7 +91,10 @@ TuneLog uses **Implicit Feedback**. Instead of manual ratings, it watches "Signa
 | **Replayed < 24h** | `repeat` | +3 | Highest signal; moves to "Heavy Rotation." |
 
 ### Smart Playlist Generation
-TuneLog manages a balanced "Diet" of music across several slots:
+- Can be changed from DashBoard
+
+* TuneLog manages a balanced "Diet" of music across several slots:
+
 * **Scored Songs:** Ranked by (Signal Weight × Recency Decay). Yesterday's favorite counts more than last year's.
 * **Genre Injection:** Scans for unheard songs in your top genres (e.g., Bollywood, Rap) and injects them as discoveries.
 * **Wildcards:** Resurrects "Lost Favorites" you haven't heard in 60+ days.
@@ -113,16 +124,8 @@ Added a option to import playlist from csv files, you can download csv for spoti
 
 ## Roadmap & TODO
 
-### **High Priority**
-- [x] **Spotify/External Import:** Support CSV imports (via Exportify) with fuzzy matching to Navidrome library.
-- [x] **Dynamic Genre Multiplier:** Replace hardcoded aliases with calculated weights based on total listen time per genre.
-- [ ] **Notification Bridge:** Real-time "Now Playing" popups on the React Dashboard.
-- [x] **Star Migration:** Import existing Navidrome Star ratings into the DB to solve the "Cold Start" problem. - dropped
+- [] **Notification Bridge:** Real-time "Now Playing" popups on the React Dashboard.
 
-### **Features & UI**
-- [x] **Manual Marking UI:** Allow users to manually override a signal if the automation gets it wrong.
-- [x] **Sync Progress Bar:** Real-time visual feedback for library syncing on the dashboard.
-- [ ] **M3U Export:** Option to download the generated playlist for offline/legacy players.
 
 ---
 
