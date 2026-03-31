@@ -220,11 +220,11 @@ def fuzzymatching(filePath):
     return {"matched_ids": matched_ids, "results": results, "summary": summary}
 
 
-if __name__ == "__main__":
-    results = fuzzymatching("./data/data3.csv")
-    # print("\nResulting IDs:", results
+# if __name__ == "__main__":
+#     results = fuzzymatching("./data/data3.csv")
+#     # print("\nResulting IDs:", results
 
-    #       )
+#     #       )
 
 
 # v1
