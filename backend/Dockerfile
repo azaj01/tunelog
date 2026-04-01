@@ -18,4 +18,4 @@ WORKDIR /app
 COPY --from=builder /app/deps /app/deps
 COPY . .
 
-CMD ["python", "main.py"]
+CMD ["python", "error.py"]

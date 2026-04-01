@@ -3,8 +3,15 @@ services:
     build:
       context: ./backend
     container_name: tunelog-backend
+    restart: always 
+    tty: true 
+    stdin_open: true
     volumes:
       - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FORCE_COLOR=1
+      - TERM=xterm-256color
     env_file:
       - .env
     ports:
@@ -14,6 +21,8 @@ services:
     build:
       context: ./frontend
     container_name: tunelog-frontend
+    restart: always 
+    tty: true
     ports:
       - "5173:5173"
     env_file:

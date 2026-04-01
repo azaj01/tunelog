@@ -1,15 +1,11 @@
-# This to give frontend api data
+# # This to give frontend api data
 
-
-# imports
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 import requests
 import os
 import shutil
 import tempfile
-from fastapi import UploadFile, File, HTTPException
 from typing import Optional
 from config import Navidrome_url
 from db import (
@@ -17,8 +13,10 @@ from db import (
     get_db_connection,
     get_db_connection_usr,
     get_db_connection_playlist,
+    init_db,
+    init_db_lib,
+    init_db_usr,
 )
-from db import init_db, init_db_lib, init_db_usr
 from playlist import (
     score_song,
     get_unheard_songs,
@@ -27,30 +25,26 @@ from playlist import (
     push_playlist,
     appendPlaylist,
     songSlots,
-    signalWeights
+    signalWeights,
+    API_push_playlist,
 )
 import library
 from itunesFuzzy import useFallBackMethods
 
-from genre import readJson, writeJson, DeleteDataJson , autoGenre , sync_database_to_json
+from genre import readJson, writeJson, DeleteDataJson, autoGenre, sync_database_to_json
 from misc import UpdateDBgenre
 from importPlaylist import fuzzymatching
 
-from playlist import API_push_playlist
-
 from threading import Thread
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from rich.console import Console
 
 app = FastAPI()
+console = Console(log_path=False)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "*"
-        #    "*"   use only if u want to access this with other devices, ig., mobile
-    ],
+    allow_origins=["http://localhost:5173", "*"],
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
@@ -89,9 +83,9 @@ class PlaylistOptions(BaseModel):
     username: str
     explicit_filter: str = "allow_cleaned"
     size: int = 50
-    slots: Optional[dict] = None     
-    weights: Optional[dict] = None   
-    injection : bool
+    slots: Optional[dict] = None
+    weights: Optional[dict] = None
+    injection: bool
 
 
 class UpdateMarkingPayload(BaseModel):
@@ -100,15 +94,15 @@ class UpdateMarkingPayload(BaseModel):
 
 
 class csvPlaylist(BaseModel):
-    username:list[str]
+    username: list[str]
     song_ids: list[str]
     playlist_name: str
+
 
 VALID_EXPLICIT = {"explicit", "cleaned", "notExplicit"}
 
 
 def GetGenre():
-
     conn = get_db_connection_lib()
     cursor = conn.cursor()
     rows = cursor.execute(
@@ -117,12 +111,11 @@ def GetGenre():
     conn.close()
 
     db_genres = [row[0] for row in rows]
-
     data = readJson()
     known_terms = set()
 
     for category, values in data.items():
-        known_terms.add(category.lower())  
+        known_terms.add(category.lower())
         for v in values:
             known_terms.add(v.lower())
 
@@ -134,51 +127,39 @@ def GetGenre():
     }
 
 
-# ping
-
-
 @app.get("/api/ping")
 def ping():
     return {"status": "OK"}
 
 
-# send statics
-
-
 @app.get("/api/stats")
 def stats():
-
-    # connection to db
     conn_lib = get_db_connection_lib()
-    conn_log = get_db_connection()  # tunelog.db
-
-    # no of songs in library
+    conn_log = get_db_connection()
 
     countSongsLib = conn_lib.execute("SELECT COUNT(*) FROM library").fetchone()[0]
-
     countPlayedSongs = conn_log.execute(
-    "SELECT COUNT(DISTINCT song_id) FROM listens"
-).fetchone()[0]
+        "SELECT COUNT(DISTINCT song_id) FROM listens"
+    ).fetchone()[0]
+
     signal_rows = conn_log.execute(
         "SELECT signal, COUNT(*) as count FROM listens GROUP BY signal"
     ).fetchall()
-
     signals = {row[0]: row[1] for row in signal_rows}
 
     mostPlayedArtists_row = conn_log.execute(
         "SELECT artist, COUNT(*) as count FROM listens GROUP BY artist ORDER BY count DESC LIMIT 10"
     ).fetchall()
-
     mostPlayedArtists = {row[0]: row[1] for row in mostPlayedArtists_row}
 
     mostPlayedSongs_row = conn_log.execute(
         """
-    SELECT title, artist, COUNT(*) as play_count 
-    FROM listens 
-    GROUP BY title
-    ORDER BY play_count DESC
-    LIMIT 10
-    """
+        SELECT title, artist, COUNT(*) as play_count 
+        FROM listens 
+        GROUP BY title
+        ORDER BY play_count DESC
+        LIMIT 10
+        """
     ).fetchall()
 
     mostPlayedSongs = [
@@ -199,42 +180,57 @@ def stats():
 
 
 def getJWT(admin_username, admin_password):
-    res = requests.post(
-        f"{Navidrome_url}/auth/login",
-        json={"username": admin_username, "password": admin_password},
-    )
-    if res.status_code == 200:
-        return res.json()["token"]
-    return None
+    try:
+        res = requests.post(
+            f"{Navidrome_url}/auth/login",
+            json={"username": admin_username, "password": admin_password},
+            timeout=5,
+        )
+        if res.status_code == 200:
+            return res.json().get("token")
+        return None
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        console.log("[yellow]Warning: Navidrome is currently unreachable.[/yellow]")
+        return None
+    except Exception as e:
+        console.log(f"[red]API Error (getJWT):[/red] {e}")
+        return None
 
 
 @app.post("/auth/login")
 def login(data: LoginData):
-    admin = data.username
-    password = data.password
-    res = getJWT(admin, password)
-    conn = get_db_connection_usr()
-    cursor = conn.cursor()
+    try:
+        admin = data.username
+        password = data.password
+        res = getJWT(admin, password)
 
-    if res:
+        if not res:
+            return {
+                "status": "failed",
+                "reason": "Invalid credentials or Navidrome offline",
+            }
+
+        conn = get_db_connection_usr()
+        cursor = conn.cursor()
+
         existing = cursor.execute(
             "SELECT * FROM user WHERE username = ?", (admin,)
         ).fetchone()
 
-        if existing:
-            print("[TUNELOG]username already in database")
-        else:
+        if not existing:
             cursor.execute(
                 "INSERT INTO user (username, password, isAdmin) VALUES (?, ?, ?)",
                 (admin, password, True),
             )
             conn.commit()
+            console.log(f"[green]New User Created:[/green] {admin}")
 
         conn.close()
         return {"status": "success", "JWT": res}
 
-    conn.close()
-    return {"status": "failed", "reason": "Invalid username or password"}
+    except Exception as e:
+        console.log(f"[red]Login Route Error:[/red] {e}")
+        return {"status": "failed", "reason": "Internal Error"}
 
 
 @app.post("/admin/create-user")
@@ -248,33 +244,27 @@ def createUser(data: CreateUserData):
     name = data.name
     isUpdate = data.isUpdate
 
-    print("Creating user.....")
-
     if not (username and admin and adminPD):
-        return {
-            "status": "failed",
-            "reason": "Missing required fields",
-        }
-    print("Getting tocker from navidrome")
+        return {"status": "failed", "reason": "Missing required fields"}
+
     token = getJWT(admin, adminPD)
     if not token:
-        return {"status": "failed", "reason": "Invalid admin credentials"}
+        return {
+            "status": "failed",
+            "reason": "Invalid admin credentials or Navidrome offline",
+        }
 
     conn = get_db_connection_usr()
-
     existing = conn.execute(
         "SELECT * FROM user WHERE username = ?", (username,)
     ).fetchone()
-
 
     if existing:
         conn.close()
         return {"status": "failed", "reason": "User already exists in DB"}
 
-    print("isUpdate : ", isUpdate)
     if isUpdate:
-        print(f"[TuneLog] Syncing user: {username}")
-
+        console.log(f"[cyan]Syncing user:[/cyan] {username}")
         try:
             res = requests.get(
                 f"{Navidrome_url}/api/user",
@@ -282,6 +272,7 @@ def createUser(data: CreateUserData):
                     "Content-Type": "application/json",
                     "X-ND-Authorization": f"Bearer {token}",
                 },
+                timeout=10,
             )
 
             if res.status_code != 200:
@@ -292,25 +283,16 @@ def createUser(data: CreateUserData):
                 }
 
             users = res.json()
-
             user_exists = any(u.get("userName") == username for u in users)
 
             if user_exists:
-                print(f"[TuneLog] User {username} exists in Navidrome --> adding to DB")
-
                 conn.execute(
                     "INSERT INTO user (username, password, isAdmin) VALUES (?, ?, ?)",
                     (username, password, isAdmin),
                 )
                 conn.commit()
                 conn.close()
-
-                return {
-                    "status": "success",
-                    "reason": "User synced from Navidrome",
-                }
-
-            print(f"[TuneLog] User {username} not found --> creating in Navidrome")
+                return {"status": "success", "reason": "User synced from Navidrome"}
 
             res_create = requests.post(
                 f"{Navidrome_url}/api/user",
@@ -325,6 +307,7 @@ def createUser(data: CreateUserData):
                     "isAdmin": isAdmin,
                     "email": email,
                 },
+                timeout=10,
             )
 
             if res_create.status_code == 200:
@@ -334,12 +317,10 @@ def createUser(data: CreateUserData):
                 )
                 conn.commit()
                 conn.close()
-
                 return {
                     "status": "success",
                     "reason": "User created in Navidrome and DB",
                 }
-
             else:
                 conn.close()
                 return {
@@ -352,37 +333,37 @@ def createUser(data: CreateUserData):
             return {"status": "failed", "reason": str(e)}
 
     if username and password and isAdmin is not None:
-        res = requests.post(
-            f"{Navidrome_url}/api/user",
-            headers={
-                "Content-Type": "application/json",
-                "X-ND-Authorization": f"Bearer {token}",
-            },
-            json={
-                "userName": username,
-                "name": name,
-                "password": password,
-                "isAdmin": isAdmin,
-                "email": email,
-            },
-        )
-
-        if res.status_code == 200:
-            conn.execute(
-                "INSERT INTO user (username, password, isAdmin) VALUES (?, ?, ?)",
-                (username, password, isAdmin),
+        try:
+            res = requests.post(
+                f"{Navidrome_url}/api/user",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-ND-Authorization": f"Bearer {token}",
+                },
+                json={
+                    "userName": username,
+                    "name": name,
+                    "password": password,
+                    "isAdmin": isAdmin,
+                    "email": email,
+                },
+                timeout=10,
             )
-            conn.commit()
-            conn.close()
 
-            return {
-                "status": "success",
-                "reason": "User created successfully",
-            }
-
-        else:
+            if res.status_code == 200:
+                conn.execute(
+                    "INSERT INTO user (username, password, isAdmin) VALUES (?, ?, ?)",
+                    (username, password, isAdmin),
+                )
+                conn.commit()
+                conn.close()
+                return {"status": "success", "reason": "User created successfully"}
+            else:
+                conn.close()
+                return {"status": "failed", "reason": "Navidrome API failed"}
+        except Exception as e:
             conn.close()
-            return {"status": "failed", "reason": "Navidrome API failed"}
+            return {"status": "failed", "reason": str(e)}
 
     conn.close()
     return {"status": "failed", "reason": "Invalid input"}
@@ -391,7 +372,6 @@ def createUser(data: CreateUserData):
 @app.post("/admin/get-users")
 def getUsers(data: AdminAuth):
     token = getJWT(data.admin, data.adminPD)
-
     if not token:
         return {"status": "failed", "reason": "Invalid admin credentials"}
 
@@ -419,12 +399,12 @@ def getUserData(username: str = "", password: str = ""):
     if username != "" and password != "":
         rows = cursor.execute(
             """
-        SELECT signal, COUNT(signal) 
-        FROM listens 
-        WHERE user_id = ? 
-        GROUP BY signal;
-
-            """, (username,)
+            SELECT signal, COUNT(signal) 
+            FROM listens 
+            WHERE user_id = ? 
+            GROUP BY signal;
+            """,
+            (username,),
         ).fetchall()
 
         stats_map = {row[0]: row[1] for row in rows}
@@ -436,12 +416,13 @@ def getUserData(username: str = "", password: str = ""):
             WHERE user_id = ? 
             ORDER BY timestamp DESC 
             LIMIT 1
-        """,
+            """,
             (username,),
         ).fetchone()
         last_log = lastTimeStamp[0] if lastTimeStamp else "never"
 
         total_listens = sum(stats_map.values())
+        conn.close()
 
         return {
             "status": "ok",
@@ -453,15 +434,13 @@ def getUserData(username: str = "", password: str = ""):
             "lastLogged": last_log,
         }
     else:
-        return {
-            "status" : "failed , username required"
-        }
+        conn.close()
+        return {"status": "failed , username required"}
 
 
 @app.get("/api/sync/stop")
 def stopSync():
     library._stopSync = True
-    # print("stopping request recived")
     return {"status": "ok", "response": "stopped syncing"}
 
 
@@ -471,38 +450,29 @@ def syncStatus():
     cursor = conn.cursor()
 
     total_songs = cursor.execute("SELECT COUNT(*) FROM library").fetchone()[0]
-
     explicit_songs = cursor.execute(
         "SELECT COUNT(*) FROM library WHERE explicit = 'explicitContent'"
     ).fetchone()[0]
-
     last_sync = cursor.execute(
         "SELECT last_synced FROM library ORDER BY last_synced DESC LIMIT 1"
     ).fetchone()
-
     songs_needing_itunes = cursor.execute(
         "SELECT COUNT(*) FROM library WHERE explicit IS NULL"
     ).fetchone()[0]
-
     not_explicit = cursor.execute(
         "SELECT COUNT(*) FROM library WHERE explicit = 'notExplicit'"
     ).fetchone()[0]
-
     cleaned = cursor.execute(
         "SELECT COUNT(*) FROM library WHERE explicit = 'cleaned'"
     ).fetchone()[0]
-
     not_in_itunes = cursor.execute(
         "SELECT COUNT(*) FROM library WHERE explicit = 'notInItunes'"
     ).fetchone()[0]
-
     manual_needed = cursor.execute(
         "SELECT COUNT(*) FROM library WHERE explicit = 'manual'"
     ).fetchone()[0]
 
     conn.close()
-
-    # print("sending sync data to frontend : manual : " , manual_needed)
 
     return {
         "is_syncing": library._isSyncing,
@@ -537,14 +507,11 @@ def syncSetting(
     auto_sync_hour: int = 2, use_itunes: bool = False, timezone: str = "Asia/Kolkata"
 ):
     library.setSyncSettings(auto_sync_hour, use_itunes, timezone)
-    
     return {"status": "ok"}
 
 
 @app.get("/api/library/marking")
 def manualMarking():
-    # print("sending data from library marked manual")
-
     conn = get_db_connection_lib()
     cursor = conn.cursor()
     rows = cursor.execute("SELECT * FROM library WHERE explicit = 'manual'").fetchall()
@@ -568,8 +535,7 @@ def manualMarking():
 
 @app.post("/api/library/marking")
 def updateMarking(payload: UpdateMarkingPayload):
-    print("Recived Manual Markings")
-    print("Song ID : " , payload.song_id , "Updated Tag to : " , payload.explicit)
+    console.log(f"[cyan]Manual Marking:[/cyan] {payload.song_id} -> {payload.explicit}")
 
     if payload.explicit not in VALID_EXPLICIT:
         return {"status": "error", "reason": "Invalid explicit value"}, 400
@@ -585,8 +551,6 @@ def updateMarking(payload: UpdateMarkingPayload):
 
     return {"status": "ok", "song_id": payload.song_id, "explicit": payload.explicit}
 
-
-# playlist api
 
 @app.get("/api/playlist/songs")
 def getSongsFromPlaylist(username: str):
@@ -639,56 +603,52 @@ def generatePlaylist(data: PlaylistOptions):
     explicit_filter = data.explicit_filter
     size = data.size
     injection = data.injection
-    print("genre injection : " , injection)
+
+    console.log(
+        f"[cyan]Playlist Generation:[/cyan] {username} | Filter: {explicit_filter} | Size: {size}"
+    )
+
     try:
         if data.slots:
             songSlots(data.slots)
-            print("=== PLAYLIST CONFIG ===")
-            print("slots:", data.slots)
-
         if data.weights:
             signalWeights(data.weights)
-            # print ("generated playlist for signal weights : " , data .weights)
-            print("weights:", data.weights)
-            print("=======================")
 
         scores = score_song(username)
         unheard, unheard_ratio = get_unheard_songs(scores)
         wildcards = get_wildcard_songs(scores, username)
         playlist, song_signals = build_playlist(
-            scores, unheard, wildcards, unheard_ratio, username, explicit_filter, size , injection
+            scores,
+            unheard,
+            wildcards,
+            unheard_ratio,
+            username,
+            explicit_filter,
+            size,
+            injection,
         )
         push_playlist(playlist, username, song_signals)
 
-        return {
-            "status": "ok",
-            "songs_added": len(playlist),
-        }
+        return {"status": "ok", "songs_added": len(playlist)}
 
     except Exception as e:
+        console.log(f"[red]Playlist Gen Error:[/red] {e}")
         return {"status": "error", "reason": str(e)}
 
 
 @app.post("/api/playlist/append")
-def appendPlaylist_api(
-    data: PlaylistOptions
-):
-    print("in appened mode")
+def appendPlaylist_api(data: PlaylistOptions):
     username = data.username
     explicit_filter = data.explicit_filter
     size = data.size
+
+    console.log(f"[cyan]Append Playlist:[/cyan] {username} | Size: {size}")
+
     try:
         if data.slots:
             songSlots(data.slots)
-            # print("generated playlist of slots : " , data.slots)
-            print("=== PLAYLIST CONFIG ===")
-            print("slots:", data.slots)
-
         if data.weights:
             signalWeights(data.weights)
-            # print ("generated playlist for signal weights : " , data .weights)
-            print("weights:", data.weights)
-            print("=======================")
 
         conn = get_db_connection_usr()
         row = conn.execute(
@@ -700,13 +660,7 @@ def appendPlaylist_api(
             return {"status": "error", "reason": "User not found in TuneLog database"}
 
         password = row[0]
-
-        success = appendPlaylist(
-            username,
-            password,
-            explicit_filter,
-            size,
-        )
+        success = appendPlaylist(username, password, explicit_filter, size)
 
         if success:
             return {
@@ -723,10 +677,8 @@ def appendPlaylist_api(
 
 @app.get("/api/user/profile")
 def getUserProfile(username: str, password: str):
-
-    conn_listen = get_db_connection() 
-    conn_library = get_db_connection_lib() 
-
+    conn_listen = get_db_connection()
+    conn_library = get_db_connection_lib()
     lc = conn_listen.cursor()
     lib = conn_library.cursor()
 
@@ -736,7 +688,7 @@ def getUserProfile(username: str, password: str):
         FROM listens
         WHERE user_id = ?
         GROUP BY signal
-    """,
+        """,
         (username,),
     ).fetchall()
 
@@ -744,11 +696,7 @@ def getUserProfile(username: str, password: str):
     total = sum(signal_map.values())
 
     last = lc.execute(
-        """
-        SELECT timestamp FROM listens
-        WHERE user_id = ?
-        ORDER BY timestamp DESC LIMIT 1
-    """,
+        "SELECT timestamp FROM listens WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
         (username,),
     ).fetchone()
 
@@ -760,7 +708,7 @@ def getUserProfile(username: str, password: str):
         GROUP BY song_id
         ORDER BY cnt DESC
         LIMIT 20
-    """,
+        """,
         (username,),
     ).fetchall()
 
@@ -776,7 +724,7 @@ def getUserProfile(username: str, password: str):
             SELECT signal, COUNT(*) as c FROM listens
             WHERE user_id = ? AND song_id = ?
             GROUP BY signal ORDER BY c DESC LIMIT 1
-        """,
+            """,
             (username, song_id),
         ).fetchone()
         top_songs.append(
@@ -789,12 +737,7 @@ def getUserProfile(username: str, password: str):
         )
 
     top_artists_raw = lc.execute(
-        """
-        SELECT song_id, COUNT(*) as cnt
-        FROM listens
-        WHERE user_id = ?
-        GROUP BY song_id
-    """,
+        "SELECT song_id, COUNT(*) as cnt FROM listens WHERE user_id = ? GROUP BY song_id",
         (username,),
     ).fetchall()
 
@@ -815,12 +758,7 @@ def getUserProfile(username: str, password: str):
     )[:20]
 
     top_genres_raw = lc.execute(
-        """
-        SELECT song_id, COUNT(*) as cnt
-        FROM listens
-        WHERE user_id = ?
-        GROUP BY song_id
-    """,
+        "SELECT song_id, COUNT(*) as cnt FROM listens WHERE user_id = ? GROUP BY song_id",
         (username,),
     ).fetchall()
 
@@ -846,7 +784,7 @@ def getUserProfile(username: str, password: str):
         WHERE user_id = ?
         ORDER BY timestamp DESC
         LIMIT 100
-    """,
+        """,
         (username,),
     ).fetchall()
 
@@ -861,7 +799,7 @@ def getUserProfile(username: str, password: str):
                 "artist": meta[1] if meta else "Unknown",
                 "genre": meta[2] if meta else "—",
                 "signal": signal,
-                "listened_at": timestamp,  
+                "listened_at": timestamp,
             }
         )
 
@@ -896,10 +834,10 @@ def getMonthlyListens():
         GROUP BY month
         ORDER BY month ASC
     """
-
     rows = cursor.execute(query).fetchall()
     conn.close()
     return [{"month": row[0], "count": row[1]} for row in rows]
+
 
 _fallbackRunning = False
 _fallbackProcessed = 0
@@ -910,8 +848,8 @@ _fallbackStop = False
 @app.post("/api/sync/fallback")
 def syncByFallback(tries: int = 500):
     global _fallbackRunning, _fallbackProcessed, _fallbackTotal, _fallbackStop
-    print("Using fallback to sync")
-    print ("No of tries for each song : " , tries)
+    console.log(f"[cyan]Fallback Sync Triggered[/cyan] (Tries: {tries})")
+
     if _fallbackRunning:
         return {"status": "error", "reason": "Fallback sync already running"}
 
@@ -937,11 +875,10 @@ def syncByFallback(tries: int = 500):
         library._fallbackStop = False
         for song in songs:
             if _fallbackStop:
-                print("[FALLBACK] Stop requested")
+                console.log("[yellow]Fallback Sync Stopped[/yellow]")
                 break
-            result = useFallBackMethods(song , tries)
+            result = useFallBackMethods(song, tries)
             _fallbackProcessed += 1
-            print(f"[FALLBACK] {_fallbackProcessed}/{_fallbackTotal} — {result}")
         _fallbackRunning = False
         _fallbackStop = False
 
@@ -973,53 +910,32 @@ def stopFallback():
 
 @app.get("/api/genre/read")
 def readGenre():
-    # print("Request recived to read data from json")
     data = readJson()
-    # print(data)
-    # autoGenre(data)
-    return {
-        "status" : "success",
-        "Genre" : data
-    }
+    return {"status": "success", "Genre": data}
 
 
 @app.get("/api/genre/write")
-def writeGenre(genre , noisyGenre):
-
+def writeGenre(genre, noisyGenre):
     try:
         if genre and noisyGenre:
-            print("writng")
             data = writeJson(genre, noisyGenre)
             genreData = readJson()
-            # update = UpdateDBgenre(genre , noisyGenre)
-            # print(update)
             autoGenre(genreData)
-            return {
-                "status" : "success",
-                "Genre" : data
-            }
-        else :
-            return{
-                "status" : "Category Or Genre Empty"
-            }
-    except:
-        return {
-            "status" : "Error in writing data"
-        }
+            return {"status": "success", "Genre": data}
+        else:
+            return {"status": "Category Or Genre Empty"}
+    except Exception as e:
+        console.log(f"[red]Error writing genre:[/red] {e}")
+        return {"status": "Error in writing data"}
 
 
 @app.get("/api/genre/delete")
-def deleteGenre(category , value=None):
+def deleteGenre(category, value=None):
     if category:
-        data =  DeleteDataJson(category , value )
-        return {
-            "status" : "success",
-            "Genre" : data
-        }
+        data = DeleteDataJson(category, value)
+        return {"status": "success", "Genre": data}
     else:
-        return {
-            "status" : "Deletion Failed, Caterogy is required"
-        }
+        return {"status": "Deletion Failed, Category is required"}
 
 
 @app.get("/api/genre/get")
@@ -1030,20 +946,20 @@ def GetGenreFromDb():
 
 @app.get("/api/genre/auto")
 def autoMatchGenre():
-    # print("Auto match Request Recived")
     data = readJson()
-    update = autoGenre(data) 
+    update = autoGenre(data)
     sync_database_to_json()
     remaining_data = GetGenre()
-
     return {"unmapped": remaining_data, "genre_updated": update}
 
 
 @app.post("/api/import/csv")
 async def import_csv(file: UploadFile = File(...)):
-    print("reciving file")
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a CSV.")
+    console.log(f"[cyan]Processing CSV Import:[/cyan] {file.filename}")
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(
+            status_code=400, detail="Invalid file type. Please upload a CSV."
+        )
 
     temp_dir = tempfile.gettempdir()
     temp_path = os.path.join(temp_dir, file.filename)
@@ -1057,44 +973,35 @@ async def import_csv(file: UploadFile = File(...)):
         return {
             "status": "success",
             "message": f"Processed {match_results['summary']['total']} songs.",
-            "data": match_results
+            "data": match_results,
         }
     except Exception as e:
-        print(f"Error during fuzzy matching: {e}")
-        return {
-            "status": "failed", 
-            "reason": str(e)
-        }
+        console.log(f"[red]Error during fuzzy matching:[/red] {e}")
+        return {"status": "failed", "reason": str(e)}
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
 
 @app.post("/api/import/csvPlaylist")
-def csvPlaylist(data  : csvPlaylist):
-    print(" creating playlist from csv")
+def csvPlaylist(data: csvPlaylist):
     songIdv = data.song_ids
     playname = data.playlist_name
     username = data.username
-    # print(songIdv)
+
+    console.log(f"[cyan]Creating Playlist from CSV:[/cyan] {playname}")
+
     try:
         if songIdv:
-            print(username)
-            for name in username :
-                print("username : " , name)
-                # push_playlist(songIdv , name , {} , playname , True)
-                API_push_playlist(songIdv , name , playname)
-            return {
-                "status" : "success"
-            }
+            for name in username:
+                API_push_playlist(songIdv, name, playname)
+            return {"status": "success"}
     except Exception as e:
-        print(e)
-        return {
-            "status" : e
-        }
+        console.log(f"[red]Error pushing CSV playlist:[/red] {e}")
+        return {"status": str(e)}
+
 
 if __name__ == "__main__":
     init_db()
     init_db_lib()
-    print("asdasd")
     init_db_usr()

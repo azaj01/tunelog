@@ -18,11 +18,14 @@ import requests
 import re
 import time
 import urllib.parse
-import library 
+import library
 
 from db import get_db_connection_lib
+from rich.console import Console
 
+console = Console(log_time=False, log_path=False)
 totalTries = 0
+
 
 def score(input_title, input_artist, album="", restitle="", resartist="", resalbum=""):
     t_score = fuzz.token_set_ratio(input_title, restitle)
@@ -50,7 +53,6 @@ def getSongs(tag="notInItunes"):
 
 
 def updateSong(song_id: str, explicit: str, genre: str = None, artist: str = None):
-   
     conn = get_db_connection_lib()
     cursor = conn.cursor()
 
@@ -66,9 +68,6 @@ def updateSong(song_id: str, explicit: str, genre: str = None, artist: str = Non
             """,
             (explicit, genre, artist, song_id),
         )
-        print(
-            f"[DB] Updated song_id={song_id} → explicit={explicit} genre={genre} artist={artist}"
-        )
     else:
         cursor.execute(
             """
@@ -78,9 +77,6 @@ def updateSong(song_id: str, explicit: str, genre: str = None, artist: str = Non
             WHERE song_id = ?
             """,
             (explicit, song_id),
-        )
-        print(
-            f"[DB] Updated song_id={song_id} → explicit={explicit} (genre/artist unchanged)"
         )
 
     conn.commit()
@@ -147,30 +143,16 @@ def generalItunesSearch(
             results = response.json().get("results", [])
             return results if results else None
 
-        except requests.exceptions.Timeout:
-            print(f"[ITUNES] Timeout — {title} (attempt {attempt}/{maxRetries})")
-
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
-            print(f"[ITUNES] HTTP {status} — {title} (attempt {attempt}/{maxRetries})")
-            if status in (400, 403, 404): 
+            if status in (400, 403, 404):
                 return None
-
-        except requests.exceptions.ConnectionError:
-            print(f"[ITUNES] No connection — {title} (attempt {attempt}/{maxRetries})")
-
-        except requests.exceptions.JSONDecodeError:
-            print(f"[ITUNES] Bad JSON — {title} (attempt {attempt}/{maxRetries})")
-
-        except Exception as e:
-            print(
-                f"[ITUNES] Unexpected error {e} — {title} (attempt {attempt}/{maxRetries})"
-            )
+        except Exception:
+            pass
 
         if attempt < maxRetries:
-            sleep(retryDelay * attempt) 
+            sleep(retryDelay * attempt)
 
-    print(f"[ITUNES] All {maxRetries} attempts failed — {title}")
     return None
 
 
@@ -206,44 +188,26 @@ def musicbrainz_search(
 
     for attempt in range(1, max_retries + 1):
         try:
-            time.sleep(1)  
+            time.sleep(1)
             response = requests.get(url, headers=headers, timeout=10)
 
             if 400 <= response.status_code < 500:
-                print(f"[MB] Client error {response.status_code}, skipping — {query}")
                 return None
 
-            response.raise_for_status()  
+            response.raise_for_status()
             return response.json()
-
-        except requests.exceptions.Timeout:
-            print(f"[MB] Timeout on attempt {attempt}/{max_retries} — {query}")
-
-        except requests.exceptions.ConnectionError:
-            print(f"[MB] Connection error on attempt {attempt}/{max_retries} — {query}")
-
-        except requests.exceptions.HTTPError as e:
-            print(f"[MB] HTTP error on attempt {attempt}/{max_retries}: {e} — {query}")
-
-        except Exception as e:
-            print(
-                f"[MB] Unexpected error on attempt {attempt}/{max_retries}: {e} — {query}"
-            )
+        except Exception:
+            pass
 
         if attempt < max_retries:
-            wait = 2**attempt 
-            print(f"[MB] Retrying in {wait}s...")
+            wait = 2**attempt
             time.sleep(wait)
 
-    print(f"[MB] All {max_retries} attempts failed — {query}")
     return None
 
 
-def fuzzyScoreMatch(response, song, isAlbum=False , tryLimit : int = 500):
+def fuzzyScoreMatch(response, song, isAlbum=False, tryLimit: int = 500):
     global totalTries
-
-    tries = 0
-
 
     if not response:
         return None, 0
@@ -255,8 +219,7 @@ def fuzzyScoreMatch(response, song, isAlbum=False , tryLimit : int = 500):
     results = []
 
     for res in response:
-        if totalTries >= tryLimit:   
-            print(f"[FUZZY] Hit {tryLimit} try limit, stopping.")
+        if totalTries >= tryLimit:
             return None, 0
 
         messytitle = res.get("trackName")
@@ -280,38 +243,30 @@ def fuzzyScoreMatch(response, song, isAlbum=False , tryLimit : int = 500):
                 resartist=artist,
             )
         )
-        tries += 1
-        totalTries += 1 
+        totalTries += 1
 
         results.append((fuzzyScore, res))
-     
+
     if not results:
         return None, 0
 
     results.sort(key=lambda x: x[0], reverse=True)
     bestScore, bestMatch = results[0]
 
-    print(
-        f"[FUZZY][Total tries : {totalTries}] Best score: {bestScore} → {bestMatch.get('trackName')} by {bestMatch.get('artistName')}"
-    )
-
     return (bestMatch, bestScore) if bestScore >= 70 else (None, bestScore)
 
 
 def fallback1(song):
-    print("[FB1] Title only")
     title = clean_text(song["title"])
     return generalItunesSearch(title, "", 200)
 
 
 def fallback2(song):
-    print("[FB2] Artist only")
     artist = clean_text(song["artist"])
     return generalItunesSearch(artist, "", 200)
 
 
-def fallback3(song , tries = 500):
-    print("[FB3] Album lookup")
+def fallback3(song, tries=500):
     album = clean_text(song.get("album", ""))
     if not album or album == "unknown album":
         return None
@@ -331,14 +286,13 @@ def fallback3(song , tries = 500):
             trimText=False,
         )
         if lookup:
-            match, sc = fuzzyScoreMatch(lookup, song, True , tryLimit= 500)
+            match, sc = fuzzyScoreMatch(lookup, song, True, tryLimit=500)
             if match:
                 return match, sc
     return None, 0
 
 
-def fallback4(song , trie = 500):
-    print("[FB4] MusicBrainz")
+def fallback4(song, trie=500):
     title = clean_text(song.get("title", ""))
     artist = clean_text(song.get("artist", ""))
     album = clean_text(song.get("album", ""))
@@ -359,7 +313,7 @@ def fallback4(song , trie = 500):
         is_album = True
 
     r = mb_to_itunes_format(res)
-    return fuzzyScoreMatch(r, song, is_album , tryLimit=trie) 
+    return fuzzyScoreMatch(r, song, is_album, tryLimit=trie)
 
 
 def itunes_to_song_format(res):
@@ -374,16 +328,16 @@ def itunes_to_song_format(res):
 
 def useFallBackMethods(song, tries):
     global totalTries
-    totalTries = 0  
+    totalTries = 0
 
     if library._fallbackStop:
-        print("sync Stopping Command Received")
+        console.log("[bold red]Sync Stopping Command Received[/bold red]")
         return
 
     song_id = song["song_id"]
-    print(f"\n{'='*60}")
-    print(f"Processing: {song['title']} | {song['artist']}")
-    print(f"{'='*60}")
+    console.print(
+        f"[bold cyan]Processing:[/bold cyan] {song['title']} | {song['artist']}"
+    )
 
     artist = clean_text(song["artist"])
     title = clean_text(song["title"])
@@ -394,22 +348,22 @@ def useFallBackMethods(song, tries):
     if raw:
         match, sc = fuzzyScoreMatch(raw, song, tryLimit=tries)
 
-    if not match and totalTries < tries:  
+    if not match and totalTries < tries:
         raw = fallback1(song)
         if raw:
             match, sc = fuzzyScoreMatch(raw, song, tryLimit=tries)
 
-    if not match and totalTries < tries:  
+    if not match and totalTries < tries:
         raw = fallback2(song)
         if raw:
             match, sc = fuzzyScoreMatch(raw, song, tryLimit=tries)
 
-    if not match and totalTries < tries:  
+    if not match and totalTries < tries:
         result = fallback3(song, tries)
         if result and isinstance(result, tuple):
             match, sc = result
 
-    if not match and totalTries < tries:  
+    if not match and totalTries < tries:
         mb_match, mb_sc = fallback4(song, trie=tries)
         if mb_match:
             itunes_song = itunes_to_song_format(mb_match)
@@ -430,11 +384,13 @@ def useFallBackMethods(song, tries):
                 genre=itunes_genre or song.get("genre"),
                 artist=itunes_artist or song.get("artist"),
             )
+            console.log(f"[green]Matched[/green] (Score: {sc}) -> explicit: {explicit}")
             return f"Song matched with a score of : {sc}"
         else:
             updateSong(song_id=song_id, explicit=explicit)
+            console.log(f"[green]Matched[/green] (Score: {sc}) -> explicit: {explicit}")
             return f"Song matched with a score of : {sc}"
     else:
-        print(f"[SKIP] No match found for: {song['title']} — leaving as notInItunes")
         updateSong(song_id=song_id, explicit="manual")
+        console.log("[yellow]Skipped[/yellow] No match found. Flagged as manual.")
         return "false"

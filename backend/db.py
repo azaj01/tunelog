@@ -4,6 +4,11 @@
 
 import sqlite3
 import os
+import time
+import functools
+# import sqlite3
+from state import status_registry
+
 
 if os.path.exists("/app/data"):
     DATA_DIR = "/app/data"
@@ -149,6 +154,41 @@ def init_db_playlist():
 
     conn.commit()
     conn.close()
+
+
+def db_supervisor(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        retries = 3
+        last_error = None
+
+        for attempt in range(retries):
+            try:
+                result = func(*args, **kwargs)
+                status_registry.update("Db", status="running")
+                return result
+
+            except sqlite3.OperationalError as e:
+                last_error = e
+                if "locked" in str(e).lower():
+                    status_registry.update(
+                        "Db",
+                        status="warning",
+                        error=f"Lock detected, retry {attempt+1}",
+                    )
+                    time.sleep(1)  
+                    continue
+                raise  
+
+            except Exception as e:
+                status_registry.update("Db", status="crashed", error=str(e))
+                raise e
+
+        status_registry.update(
+            "Db", status="crashed", error=f"Final Failure: {last_error}"
+        )
+        return None
+    return wrapper
 
 
 if __name__ == "__main__":

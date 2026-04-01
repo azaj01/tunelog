@@ -18,8 +18,10 @@ import requests
 import re
 from queue import Queue
 from pathlib import Path
-from db import get_db_connection_usr
+from db import get_db_connection_usr , db_supervisor
 from time import sleep
+from rich.console import Console
+console = Console()
 
 
 event_queue = Queue()
@@ -33,7 +35,9 @@ api_version = "1.16.1"
 app_name = "tunelog"
 
 
+@db_supervisor
 def getAllUser():
+    
     conn = get_db_connection_usr()
     users = conn.execute("SELECT * FROM user").fetchall()
 
@@ -42,7 +46,6 @@ def getAllUser():
     }
 
     return USER_CREDENTIALS
-
 
 
 # default url to pull data from api
@@ -72,26 +75,22 @@ def build_url_for_user(endpoint, username, password):
     return f"{Navidrome_url.rstrip('/')}/rest/{endpoint}?{params}"
 
 def login():
-    res= requests.post(f"{Navidrome_url}/auth/login", json={
-        "username" : Navidrome_admin,
-        "password" : navidrome_password
-    }
-    )
-    data = res.json()
-    # print("Logged in with data : " , data)
-    return {
-        "jwt": data["token"],
-        "subsonic_token": data["subsonicToken"],
-        "subsonic_salt": data["subsonicSalt"],
-        "username": data["username"]
-    }
-
-
-# https://itunes.apple.com/search?term=tum+mere+ho&entity=song&limit=5
-
-
-# Itunes api call
-
+    try:
+        res= requests.post(f"{Navidrome_url}/auth/login", json={
+            "username" : Navidrome_admin,
+            "password" : navidrome_password
+        }
+        )
+        data = res.json()
+        return {
+            "jwt": data["token"],
+            "subsonic_token": data["subsonicToken"],
+            "subsonic_salt": data["subsonicSalt"],
+            "username": data["username"]
+        }
+    except Exception as e :
+        console.print("[bold red] Unable to login Navidrome " , e)
+        # print(e)
 
 def itunesApi(title, artist, retries=3):
     title = re.sub(r"\(.*?\)", "", title).strip()
@@ -100,7 +99,7 @@ def itunesApi(title, artist, retries=3):
 
     for attempt in range(retries):
         try:
-            sleep(1.5)  # rate limit buffer before every request
+            sleep(1.5)  
             response = requests.get(url, timeout=10)
             response.raise_for_status()
 
@@ -111,10 +110,10 @@ def itunesApi(title, artist, retries=3):
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if e.response else 0
             if status in (429, 403):
-                wait = 5 * (attempt + 1)  # 5s, 10s, 15s
+                wait = 5 * (attempt + 1)  
                 print(f"[ITUNES] Rate limited ({status}) — waiting {wait}s — {title}")
                 sleep(wait)
-                continue  # retry
+                continue  
             print(f"[ITUNES] HTTP error {e} — {title}")
             return None
 
@@ -122,7 +121,6 @@ def itunesApi(title, artist, retries=3):
             print(f"[ITUNES] No connection — {title}")
             return None
 
-        # success — process response
         results = response.json().get("results", [])
         if not results:
             print(f"[ITUNES] No results — {title} | {artist}")

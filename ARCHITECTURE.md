@@ -44,6 +44,7 @@ This document outlines the technical architecture, data flow, and design decisio
 - [Timezone Safety](#timezone-safety)
 - [Web ui and API layer](#Web-UI-&-API-Layer)
 - [Multi-User Setup](#multi-user-setup)
+- [Error Handling](#error-handling)
 - [Known Limitations](#known-limitations)
   
 
@@ -694,6 +695,36 @@ The `/api/user/profile` endpoint is the most complex, performing cross-database 
 I dont have enough data to test it fully, if you are willing to give me feedback it would be appriciated
 
 ---
+
+
+
+### **ERROR HANDLING**
+Added better error handling, i took some help from ai
+- `error.py` is now the entry point
+- Using Supervisor pattern to ensure it dont crash when navidrome is down
+- it will exit if `port 8000` is taken
+- if `port  5173` is taken
+- uses a heartbeat mechanism
+
+**Heartbeat Mechanism**
+
+Every major components (API, SSE, Db, library Sync) is registered in a centeral `globalStatus` object. as long as a component is working, it updates its heartbeat(timestamp)
+
+- SSE : Updates when navidrome registers a new event
+- uvicorn : updates when frontend makes api request
+- sync : when library sync (manual / auto) is triggered 
+
+**Supervisoor** 
+
+`error.py` works as a container, its run a infinite loop that checks the health of system every 15 sec 
+- **Stall detection** : if a critical thread stops updating heartbeat for more then 120 sec , supervisor marks it as a `unresponsive`
+- crash reporting : if a thread hits a unrecoverable error, it flags its status as a crashed in the registry
+- if cirtical failure is detected it exists the program using `sys.exit(1)`
+
+- Using `threading.lock` it ensures every other thread reports in same time without curpporting data
+
+---
+
 
 
 

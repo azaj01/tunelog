@@ -41,81 +41,99 @@
 
 # ISSUES : DATABASE IS LOCKEd
 # FIX : executemany()
-
-
 from config import build_url_for_user, getAllUser
 import requests
-from db import get_db_connection , get_db_connection_lib
-
-
+from db import get_db_connection, get_db_connection_lib, db_supervisor
+from state import status_registry
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.columns import Columns
 import sqlite3
 from datetime import datetime
+
+console = Console()
+
+star_map = {
+    "skip": -2.0,
+    "partial": 0.5,
+    "positive": 2.0,
+    "repeat": 3.0,
+}
+
+
+@db_supervisor
+def _fetch_recent_listens(cursor, user_id, song_id):
+    return cursor.execute(
+        """
+        SELECT * FROM listens
+        WHERE user_id = ? AND song_id = ?
+        ORDER BY timestamp DESC
+        LIMIT 15
+        """,
+        (user_id, song_id),
+    ).fetchall()
+
+
+@db_supervisor
+def _update_listens_genre(cursor, data):
+    cursor.executemany("UPDATE listens SET genre = ? WHERE genre = ?", data)
+
+
+@db_supervisor
+def _update_library_genre(cursor, data):
+    cursor.executemany("UPDATE library SET genre = ? WHERE genre = ?", data)
 
 
 def push_star(song, signal):
     song_id = song["song_id"]
     user_id = song["user_id"]
-    format_str = "%Y-%m-%d %H:%M:%S"
     now = datetime.now()
 
-    star_map = {
-        "skip": -2.0,
-        "partial": 0.5,
-        "positive": 2.0,
-        "repeat": 3.0,
-    }
+    try:
+        conn = get_db_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+    except Exception as e:
+        console.print(f"[bold red]push star: DB connection failed:[/bold red] {e}")
+        status_registry.update("Db", status="crashed", error=str(e))
+        return
 
-    conn = get_db_connection()
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    rows = cursor.execute(
-        """
-    SELECT * FROM listens 
-    WHERE user_id = ? AND song_id = ? 
-    ORDER BY timestamp DESC 
-    LIMIT 15
-    """,
-        (user_id, song_id),
-    ).fetchall()
+    rows = _fetch_recent_listens(cursor, user_id, song_id)
+    conn.close()
+
+    if rows is None:
+        console.print(
+            f"[bold red]push star: Failed to fetch listens for {song['title']}[/bold red]"
+        )
+        return
+
     totalListens = len(rows)
     if totalListens < 3:
-        print(f"Song: {song['title']} needs at least 3 listens")
-        conn.close()
+        console.print(
+            f"[dim]push star: {song['title']} needs at least 3 listens (has {totalListens})[/dim]"
+        )
         return
 
     totalWeight = 0
     rowSongScore = 0
 
     for i, row in enumerate(rows):
-        hisTimeStamp = row["timestamp"]
-      
-        weightage = 0.9** i 
-
+        weightage = 0.9**i
         rowSignal = row["signal"]
-
         rating = star_map.get(rowSignal, 0)
 
-        print(
-            "song : ",
-            song["title"],
-            "rating : ",
-            rating,
-            "signal : ",
-            rowSignal,
-            "    |  ",
-            "weightage : ",
-            weightage,
-            " | Index : , " , i
-        )
         rowSongScore += rating * weightage
         totalWeight += weightage
 
     if totalWeight <= 0:
-        conn.close()
+        console.print(
+            f"[yellow]push_star: totalWeight is 0 for {song['title']}, skipping.[/yellow]"
+        )
         return
 
     songScore = rowSongScore / totalWeight
-   
+
     if songScore >= 2.5:
         final_rating = 5
     elif songScore >= 1.5:
@@ -127,56 +145,147 @@ def push_star(song, signal):
     else:
         final_rating = 1
 
-    print(f"Final score for {song['title']}: {final_rating}")
+    table = Table(
+        title=f"Recent History: {song['title']}",
+        title_style="bold magenta",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    table.add_column("Index", justify="right", style="dim")
+    table.add_column("Signal", justify="center")
+    table.add_column("Rating", justify="right")
+    table.add_column("Weight", justify="right", style="italic")
+    for i, row in enumerate(rows):
+        row_signal = row["signal"]
+        sig_style = (
+            "red"
+            if row_signal == "skip"
+            else (
+                "green"
+                if row_signal == "positive"
+                else "cyan" if row_signal == "repeat" else "white"
+            )
+        )
 
-    conn.close()
+        table.add_row(
+            str(i),
+            f"[{sig_style}]{row_signal}[/{sig_style}]",
+            f"{star_map.get(row_signal, 0):.1f}",
+            f"{0.9**i:.3f}",
+        )
+    summary_content = (
+        f"[bold white]User:[/bold white] {user_id}\n"
+        f"[bold white]Calculated Score:[/bold white] [cyan]{songScore:.2f}[/cyan]\n"
+        f"[bold white]Final Rating:[/bold white] [bold yellow]({final_rating} Stars)[/bold yellow]"
+    )
+
+    summary_panel = Panel(
+        summary_content,
+        title="[bold green]Star Update[/bold green]",
+        border_style="green",
+        expand=False,
+    )
+
+    console.print(table)
+    console.print(summary_panel)
 
     USER_CREDENTIALS = getAllUser()
     password = USER_CREDENTIALS.get(user_id)
     if not password:
-        print(f"[STAR ERROR] No credentials found for {user_id}")
+        console.print(
+            f"[bold red]push_star: No credentials for user {user_id}[/bold red]"
+        )
+        status_registry.update(
+            "main", status="warning", error=f"Missing credentials: {user_id}"
+        )
         return
 
     url = build_url_for_user("setRating", user_id, password)
     url += f"&id={song_id}&rating={final_rating}"
 
     try:
-        requests.get(url)
-        print(f"[STAR] {user_id} | {song['title']} --> {final_rating} stars")
-    except Exception as e:
-        print(f"[STAR ERROR] {user_id} | {e}")
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        console.print(
+            f"[bold green]STAR:[/bold green] {user_id} | {song['title']} → {final_rating} stars"
+        )
+    except requests.Timeout:
+        console.print(
+            f"[bold red]push_star: Timeout reaching Navidrome for {user_id}[/bold red]"
+        )
+        status_registry.update(
+            "main", status="warning", error=f"Navidrome timeout: {user_id}"
+        )
+    except requests.HTTPError as e:
+        console.print(f"[bold red]push_star: HTTP error for {user_id}:[/bold red] {e}")
+        status_registry.update("main", status="warning", error=str(e))
+    except requests.RequestException as e:
+        console.print(
+            f"[bold red]push_star: Request failed for {user_id}:[/bold red] {e}"
+        )
+        status_registry.update("main", status="warning", error=str(e))
 
 
 def UpdateDBgenre(data, connLib=None):
-    print("In update db genre")
     if not data:
+        console.print("[yellow]UpdateDBgenre: Empty data, nothing to update.[/yellow]")
         return {"status": "Category or value is empty"}
-    conn_log = get_db_connection()
-    cursor_log = conn_log.cursor()
 
-    if connLib:
-        conn_lib = connLib
-        close_lib = False  
-    else:
-        conn_lib = get_db_connection_lib()
-        close_lib = True
+    console.print(
+        f"[bold green]UpdateDBgenre:[/bold green] Applying {len(data)} mapping(s)..."
+    )
 
-    cursor_lib = conn_lib.cursor()
-    cursor_log.executemany("UPDATE listens SET genre = ? WHERE genre = ?", data)
-    cursor_lib.executemany("UPDATE library SET genre = ? WHERE genre = ?", data)
+    try:
+        conn_log = get_db_connection()
+        cursor_log = conn_log.cursor()
+    except Exception as e:
+        console.print(
+            f"[bold red]UpdateDBgenre: Failed to connect to listens DB:[/bold red] {e}"
+        )
+        status_registry.update("Db", status="crashed", error=str(e))
+        return {"status": "db_error"}
 
-    conn_log.commit()
-    print("update made")
-    if close_lib:
+    close_lib = connLib is None
+    try:
+        conn_lib = connLib if connLib else get_db_connection_lib()
+        cursor_lib = conn_lib.cursor()
+    except Exception as e:
+        console.print(
+            f"[bold red]UpdateDBgenre: Failed to connect to library DB:[/bold red] {e}"
+        )
+        conn_log.close()
+        status_registry.update("Db", status="crashed", error=str(e))
+        return {"status": "db_error"}
+
+    listens_result = _update_listens_genre(cursor_log, data)
+    lib_result = _update_library_genre(cursor_lib, data)
+
+    if listens_result is None or lib_result is None:
+        console.print(
+            "[bold red]UpdateDBgenre: One or both updates failed after retries.[/bold red]"
+        )
+        conn_log.close()
+        if close_lib:
+            conn_lib.close()
+        return {"status": "update_error"}
+
+    try:
+        conn_log.commit()
         conn_lib.commit()
-        conn_lib.close()
-    else:
-        conn_lib.commit() 
-
-    conn_log.close()
+        console.print(
+            f"[bold green]UpdateDBgenre: Done.[/bold green] lib rows: {cursor_lib.rowcount} | log rows: {cursor_log.rowcount}"
+        )
+    except Exception as e:
+        console.print(f"[bold red]UpdateDBgenre: Commit failed:[/bold red] {e}")
+        status_registry.update("Db", status="crashed", error=str(e))
+        return {"status": "commit_error"}
+    finally:
+        conn_log.close()
+        if close_lib:
+            conn_lib.close()
 
     return {
         "status": "success",
-        "updated Rows lib": cursor_lib.rowcount,
-        "updated rows log": cursor_log.rowcount,
+        "updated_rows_lib": cursor_lib.rowcount,
+        "updated_rows_log": cursor_log.rowcount,
     }

@@ -118,8 +118,14 @@ Added a option to import playlist from csv files, you can download csv for spoti
 - I havent tested with other csv file. But I think it can handle other files as well, as long as it have Title, artist name and album name
 - For workings read `Architecture.md`
 
-
-
+### **ERROR HANDLING**
+Added better error handling, i took some help from ai
+- `error.py` is now the entry point
+- Using Supervisor pattern to ensure it dont crash when navidrome is down
+- it will exit if `port 8000` is taken
+- if `port  5173` is taken
+- uses a heartbeat mechanism
+For more info read architecture.md
 
 
 ## Roadmap & TODO

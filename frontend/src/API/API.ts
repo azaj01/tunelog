@@ -199,13 +199,11 @@ export interface GenreListResponse {
   status: string;
   genres: string[];
 }
-
 export interface AutoMatchResponse {
   status: string;
-  genres: string[];
-  "genre Updated": number;
+  unmapped: GenreListResponse; 
+  genre_updated: number; 
 }
-
 
 export interface ImportResponse {
   status: "success" | "failed";

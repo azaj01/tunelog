@@ -11,9 +11,8 @@
 
 
 # UPDATE :
-#     1. updated the logic to check repeat, instead of every two signal count as repeate, 
+#     1. updated the logic to check repeat, instead of every two signal count as repeate,
 #         if and only if last intreaction was positive or repeat it will count as repeat
-
 
 
 # TODO:
@@ -46,14 +45,15 @@
 #           - this issue causes to run watcher multiple times,
 
 
+import sys
 import requests
 import threading
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
-
-from config import build_url, event_queue
+from rich.console import Console
+from state import status_registry
+from config import build_url, event_queue 
 from db import get_db_connection, init_db, init_db_lib, init_db_usr, init_db_playlist , get_db_connection_lib
 from itunesFuzzy import useFallBackMethods
 import library
@@ -62,6 +62,7 @@ from watcher import start_sse
 from misc import push_star
 import uvicorn
 
+console = Console()
 active = {}
 
 
@@ -69,7 +70,6 @@ def navidrome_url(endpoint):
     url = build_url(endpoint)
     response = requests.get(url)
     return response.json()
-
 
 
 def Watcher():
@@ -80,7 +80,7 @@ def Watcher():
 
     for user_id in list(active.keys()):
         if now - active[user_id]["last_seen"] > 600:
-            print(f"[STALE] {user_id} flushed: {active[user_id]['title']}")
+            console.print(f"[blue][STALE] {user_id} flushed: {active[user_id]['title']}")
             log_history(active.pop(user_id))
 
     if not entries:
@@ -88,7 +88,7 @@ def Watcher():
             active[user_id]["actual_played"] += now - active[user_id]["last_seen"]
             active[user_id]["last_seen"] = now
             log_history(active.pop(user_id))
-            print(f"[STOP] {user_id} stopped")
+            console.print(f"[bold red][STOP] {user_id} stopped")
         return
 
     latest = {}
@@ -105,8 +105,8 @@ def Watcher():
         if user_id in active and active[user_id]["song_id"] == song_id:
             active[user_id]["actual_played"] += now - active[user_id]["last_seen"]
             active[user_id]["last_seen"] = now
-            print(
-                f"[SAME] {user_id} still playing: {active[user_id]['title']} | played: {round(active[user_id]['actual_played'])}s"
+            console.print(
+                f"[bold blue][SAME] {user_id} still playing: {active[user_id]['title']} | played: {round(active[user_id]['actual_played'])}s"
             )
 
         else:
@@ -125,14 +125,14 @@ def Watcher():
                 "actual_played": 0,
                 "last_seen": now,
             }
-            print(f"[NEW] {user_id} started: {entry['title']}")
+            console.print(f"[bold blue][NEW] {user_id} started: {entry['title']}")
 
     current_users = {entry["username"] for entry in entries}
     for user_id in list(active.keys()):
         if user_id not in current_users:
             active[user_id]["actual_played"] += now - active[user_id]["last_seen"]
             log_history(active.pop(user_id))
-            print(f"[STOP] {user_id} stopped")
+            console.print(f"[bold red][STOP] {user_id} stopped")
 
 
 def signal_system(percent_played, song_id, user_id):
@@ -201,7 +201,7 @@ def log_history(song):
 
 
 def autoSyncWithFallback():
-    print("[TuneLog] Starting auto sync...")
+    console.print("[bold yellow] Starting auto sync...")
     library.sync_library()
 
     conn = get_db_connection_lib()
@@ -211,8 +211,8 @@ def autoSyncWithFallback():
     conn.close()
 
     if not_in_itunes > 0:
-        print(
-            f"[TuneLog] Auto sync done. {not_in_itunes} songs need fallback — starting..."
+        console.print(
+            f"[green]Auto sync done. {not_in_itunes} songs need fallback — starting..."
         )
 
         songs_raw = conn = (
@@ -225,42 +225,82 @@ def autoSyncWithFallback():
         library._fallbackStop = False
         for song in songs:
             if library._fallbackStop:
-                print("[TuneLog] Fallback stopped")
+                console.print("[bold green]Fallback stopped")
                 break
             result = useFallBackMethods(song, tries=500)
-            print(f"[TuneLog] Fallback result: {result}")
+            console.print(f"[bold blue]Fallback result: {result}")
 
-        print("[TuneLog] Fallback sync complete")
+        console.print("[bold green]Fallback sync complete")
     else:
-        print("[TuneLog] Auto sync done. No notInItunes songs — skipping fallback")
+        console.print("[bold green]Auto sync done. No notInItunes songs — skipping fallback")
 
-
-if __name__ == "__main__":
+def main():
     # Database
-    print("Initializing databse")
-    init_db()
-    init_db_lib()
-    init_db_usr()
-    init_db_playlist()
-    uvicornThread = threading.Thread(
-        target=uvicorn.run,
-        args=("api:app",),
-        kwargs={"host": "0.0.0.0", "port": 8000 , "log_level":"warning"},
-        
-        daemon=True,
-    )
-    uvicornThread.start()
+    with console.status("[bold green]Initializing Database ..." ):
+        try:
+            # print("Initializing databse")
+            init_db()
+            init_db_lib()
+            init_db_usr()
+            init_db_playlist()
+            status_registry.update("Db" , status="initialized")
+        except Exception as e:
+            status_registry.update("Db", status="crashed" , error=e)
+            console.print("[bold red]Failed TO Initialize Database")
+    console.print('[bold green]Database Initialized Successfully')
+
+    with console.status("[bold green]Starting API & Verifying Port 8000..."):
+        try:    
+            uvicornThread = threading.Thread(
+                target=uvicorn.run,
+                args=("api:app",),
+                kwargs={"host": "0.0.0.0", "port": 8000, "log_level": "warning"},
+                daemon=True,
+            )
+            uvicornThread.start()
+            time.sleep(2.0) 
+            if not uvicornThread.is_alive():
+                status_registry.update("uvicorn", status="crashed", error="Port Conflict")
+                console.print("[bold red]API Failed to Bind:[/bold red] Port 8000 is likely already in use.")
+                sys.exit(1) 
+            else:
+                status_registry.update("uvicorn", status="running")
+                console.print("[bold green]API Started & Verified on Port 8000[/bold green]")
+        except Exception as e:
+            status_registry.update("uvicorn", status="crashed", error=str(e))
+            console.print(f"[bold red]API Server Thread Initialization Failed:[/bold red] {e}")
+            sys.exit(1)
 
     # Watcher
-    watcherThread = threading.Thread(target=start_sse, daemon=True)
-    watcherThread.start()
 
-    n = 0
+    with console.status("[bold green]Starting Watcher Thread"):
+        try:    
+            watcherThread = threading.Thread(target=start_sse, daemon=True)
+            watcherThread.start()
+            time.sleep(2.0)
+            if not watcherThread.is_alive():
+                status_registry.update(
+                    "watcher", status="crashed", error="navidrome error"
+                )
+                console.print(
+                    "[bold red]Failed to start SSE, check if Navidrome is running"
+                )
+                sys.exit(1)
+            else:
+                status_registry.update("watcher", status="running")
+                console.print(
+                    "[bold green]Watcher Started Succesfully"
+                )
+        except Exception as e:
+            status_registry.update("watcher", status="crashed", error=str(e))
+            console.print(f"[bold red]Watcher Thread Initialization Failed:[/bold red] {e}")
+            sys.exit(1)
+
     last_auto_sync_day = None 
 
     while True:
         if library._startSyncSong and not library._isSyncing:
-            print("[TuneLog] Manual sync triggered from UI...")
+            console.print("[bold blue] Manual sync triggered from UI...")
             syncThread = threading.Thread(target=library.sync_library, daemon=True)
             syncThread.start()
 
@@ -269,16 +309,15 @@ if __name__ == "__main__":
         current_day = now.date()
         settings = library.getSyncSettings()
         auto_sync_hour = settings["auto_sync"]
-        # print("Current Hour : " ,  current_hour)
         if (
             current_hour == auto_sync_hour
             and current_day != last_auto_sync_day
             and not library._isSyncing
             ):
-                print(f"[TuneLog] Auto sync triggered at {now.strftime('%H:%M')}...")
-                last_auto_sync_day = current_day
-                syncThread = threading.Thread(target=autoSyncWithFallback, daemon=True)  # ← changed
-                syncThread.start()
+            console.print(f"[bold blue] Auto sync triggered at {now.strftime('%H:%M')}...")
+            last_auto_sync_day = current_day
+            syncThread = threading.Thread(target=autoSyncWithFallback, daemon=True) 
+            syncThread.start()
         try:
             event = event_queue.get(
                 timeout=2
