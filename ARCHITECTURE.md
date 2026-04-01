@@ -748,7 +748,6 @@ Spawns sync_library() in background thread
 ## Known Limitations
 
 - **Cold start** — recommendations improve only after sufficient listen history builds up. Initial playlists are genre-injected unheard songs with little signal weighting.
-- **Symfonium / third-party sync** — each playlist regeneration creates a new playlist ID in Navidrome. Apps that sync by ID (like Symfonium) require manual reimport each time.
 - **No genre metadata** — songs without embedded genre tags receive `"default"` and score 1 point in the unheard pool, giving them lower priority than tagged songs.
 - **Artist name variants** — `"Arijit Singh"` and `"Arjeet Singh"` are treated as different artists. No fuzzy matching implemented yet.
 - **iTunes metadata sync is slow** — `sync_library()` makes one iTunes API call per song with a 0.5–1s delay to avoid rate limiting. For a 2000+ song library, a full sync takes 20–40 minutes. Re-syncing after adding new songs is fast since only songs with `explicit IS NULL` are fetched, but initial sync is a one-time long operation.
