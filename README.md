@@ -125,6 +125,7 @@ Added a option to import playlist from csv files, you can download csv for spoti
 ## Roadmap & TODO
 
 - [] **Notification Bridge:** Real-time "Now Playing" popups on the React Dashboard.
+- [] **Rnadom Song Toggle:** Add a Better toggle to turn of random song integration in playlist
 
 
 ---
