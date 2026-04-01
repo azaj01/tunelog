@@ -40,7 +40,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from rich.console import Console
 
 app = FastAPI()
-console = Console(log_path=False)
+console = Console(log_path=False, log_time=False)
 
 app.add_middleware(
     CORSMiddleware,
