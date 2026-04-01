@@ -2,13 +2,10 @@
 
 This document outlines the technical architecture, data flow, and design decisions made during TuneLog development.
 
-## TODO
-
-- Create a failsafe and change the songlist db depeneding on deleted songs, currently if some songs were delete, playlist will created and based on those deleted songs
-
-
-
 ## Roadmap
+- [ ] Add delete user option
+- [ ] Figure out why cpu spikes when using fast sync in docker but not when doing python3
+- [ ] Web UI dashboard (in progress — needs polish)
 - [x] Navidrome API connection
 - [x] SQLite listen logger
 - [x] Multi-user support
@@ -21,13 +18,9 @@ This document outlines the technical architecture, data flow, and design decisio
 - [x] Playlist pushed directly to Navidrome (private, per-user)
 - [x] Docker support
 - [x] FastAPI backend (early stage)
-- [ ] Web UI dashboard (in progress — needs polish)
 - [x] Auto library sync scheduler
-- [ ] M3U export
 - [x] Add stop library sync
-- [ ] Figure out why cpu spikes when using fast sync in docker but not when doing python3
 - [x] Add more information to users in users page
-- [ ] Add delete user option
 - [x] Add playlist creation
 - [x] Figure out if I can use updateplaylist api of navidrome
 - [x] Use a better approach to the marking stat system, if user listen to one song and get one star and listen again completely it gets flagged as repeat and gets a 5 star
@@ -37,12 +30,7 @@ This document outlines the technical architecture, data flow, and design decisio
 
 
 ## CURRENTLY : 
-- Currently building web ui dash board
-
-
-
-## Key changes :-
-- Instead of logging getNowPlaying api every 5 sec, use SSE to automate it
+ - currently cleaning up the code and adding error handling
 
 
 ## Table of Contents
