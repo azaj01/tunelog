@@ -92,9 +92,7 @@ TuneLog uses **Implicit Feedback**. Instead of manual ratings, it watches "Signa
 
 ### Smart Playlist Generation 
 - Can be changed from DashBoard
-
 * TuneLog manages a balanced "Diet" of music across several slots:
-
 * **Scored Songs:** Ranked by (Signal Weight × Recency Decay). Yesterday's favorite counts more than last year's.
 * **Genre Injection:** Scans for unheard songs in your top genres (e.g., Bollywood, Rap) and injects them as discoveries.
 * **Wildcards:** Resurrects "Lost Favorites" you haven't heard in 60+ days.
