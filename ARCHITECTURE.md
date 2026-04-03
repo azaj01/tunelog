@@ -5,29 +5,22 @@ This document outlines the technical architecture, data flow, and design decisio
 ## Recent changes : 
 - changed scoring system 
 
+## Changes/Idea to implement 
+- Better scoring logic :- instead of just skip, repeate partial complete, add 'accidental < 10', 'hard skip < 30-50' , 'partial < 50 to 80', 'complete after 80' and repeat 
+- 'mood & intent' :- Rather then just creating playlist on skips and listens, put mood and intent in logic , basic idea is that if user is skipping 5 song in a row, it's not that he don't like the song but rather he is not in the mood
+- better genre mapping :- rather then replying in a single genre add a multiple genre system 
+- Tunelog reporter :- to decrease the difference btw online listen and offline, it's a android app that will watch notification bar for music changes and send that when user is connected to the server
+- Navidrome 0.61v :- it will add better reporting for play pause, then i will be able to improve my script further, until then i am working on tunelog reporter
 
-## Roadmap
-- [ ] Add delete user option
-- [ ] Figure out why cpu spikes when using fast sync in docker but not when doing python3
-- [ ] Web UI dashboard (in progress — needs polish)
-- [x] Navidrome API connection
-- [x] SQLite listen logger
-- [x] Multi-user support
-- [x] INSERT on new song, UPDATE within 10 min window
-- [x] Signal scoring (skip / partial / positive / repeat)
-- [x] Recency-weighted scoring
-- [x] Genre-injected unheard song discovery
-- [x] Wildcard resurrection (60-day decay)
-- [x] Per-user personalised playlists
-- [x] Playlist pushed directly to Navidrome (private, per-user)
-- [x] Docker support
-- [x] FastAPI backend (early stage)
-- [x] Auto library sync scheduler
-- [x] Add stop library sync
-- [x] Add more information to users in users page
-- [x] Add playlist creation
-- [x] Figure out if I can use updateplaylist api of navidrome
-- [x] Use a better approach to the marking stat system, if user listen to one song and get one star and listen again completely it gets flagged as repeat and gets a 5 star
+### plugins :
+
+I have plans to implement plugin for navidrome for better monitoring of user interaction, it should rank diffrently to a song that is user listening by searching them or for playing via a playlist, 
+
+
+- dynamically changing playlist : plan is to implement a dynamically changing playlist, if user skips a song, scripts re calculate the score and change the playlist and queue of the song(don't know how will I implement it) 
+
+
+
 
 ## Dropped Idea 
 - **Star Rating Import** - Navidrome does not support Star rating using api
