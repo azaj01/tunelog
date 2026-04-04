@@ -28,9 +28,9 @@ event_queue = Queue()
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-Navidrome_url = os.getenv("base_url")
-Navidrome_admin = os.getenv("admin_username")
-navidrome_password = os.getenv("admin_password")
+Navidrome_url = os.getenv("BASE_URL")         
+Navidrome_admin = os.getenv("ADMIN_USERNAME") 
+navidrome_password = os.getenv("ADMIN_PASSWORD") 
 api_version = "1.16.1"
 app_name = "tunelog"
 
