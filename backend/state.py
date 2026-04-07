@@ -31,3 +31,17 @@ class GlobalStatus:
 
 
 status_registry = GlobalStatus()
+
+
+
+
+class SyncState:
+    sync_running = False
+    sync_stop = False
+    
+    fallback_running = False
+    fallback_processed = 0
+    fallback_total = 0
+    fallback_stop = False
+    
+app_state = SyncState()

@@ -453,9 +453,7 @@ export async function fetchFallbackSyncStatus(): Promise<FallbackSyncStatus> {
 }
 
 export async function stopFallbackSync(): Promise<{ status: string }> {
-  const res = await fetch(`${BASE_URL}/api/sync/fallback/stop`, {
-    method: "POST",
-  });
+  const res = await fetch(`${BASE_URL}/api/sync/fallback/stop`);
   if (!res.ok) throw new Error("Failed to stop fallback sync");
   return res.json();
 }

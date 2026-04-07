@@ -64,11 +64,7 @@ import json
 from loguru import logger
 
 
-
-
-
 console = Console()
-
 
 
 LOG_MAX_SIZE      = os.getenv("LOG_MAX_SIZE", "10 MB")
@@ -467,3 +463,14 @@ def log_summary(user_id, size, counts):
         total=size,
         distribution=counts,
     )
+    
+    
+    
+    
+    
+    
+    
+    
+    
+def crossCheckDatabase ():
+    console.print("[bold blue]Crosschecking database for correction")

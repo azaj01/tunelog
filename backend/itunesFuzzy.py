@@ -13,14 +13,15 @@
 
 from rapidfuzz import fuzz
 from time import sleep
-from random import shuffle
+# from random import shuffle
 import requests
 import re
 import time
 import urllib.parse
-import library
+# import library
 
 from db import get_db_connection_lib
+from state import app_state
 from rich.console import Console
 
 console = Console(log_time=False, log_path=False)
@@ -329,11 +330,10 @@ def itunes_to_song_format(res):
 def useFallBackMethods(song, tries):
     global totalTries
     totalTries = 0
-
-    if library._fallbackStop:
-        console.log("[bold red]Sync Stopping Command Received[/bold red]")
+    if app_state.fallback_stop:
+        console.log("[bold red]Sync Stopping Command Received (in Fuzzy)[/bold red]")
         return
-
+    
     song_id = song["song_id"]
     console.print(
         f"[bold cyan]Processing:[/bold cyan] {song['title']} | {song['artist']}"

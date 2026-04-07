@@ -61,6 +61,9 @@ npm run dev
 ```
 
 ### .env
+`issue #3`
+by default port `5173` of localhost is allowed to access the backend api, to add more devices or ip, add it in `.env`
+
 ```bash
 #Navidrome Server
 BASE_URL=http://192.168.29.118:4533 #Chnage your ip 
@@ -70,14 +73,37 @@ ADMIN_PASSWORD=1234 # Change password
 # Frontend / API
 VITE_API_URL=http://192.168.29.118:8000 # change ip
 
+
+# Allowed origins to make api request to backend
+# This is to allow user to access website form diffrent ip or devices,. just add your ip here 
+ALLOWED_ORIGINS=http://localhost:5173,http://192.168.29.118:5173   #add more as you need or add * to allow everyone
+
+
+
 # Logging 
 # Forces the logs to save exactly where Docker is listening for the volume mount
 LOG_DIR=/app/logs
 LOG_MAX_SIZE=10 MB
 LOG_RETENTION_DAYS=7 days
 LOG_LEVEL=DEBUG
+
 ```
 - You can get your ip address by doing, `ipconfig` in windows and `ip a` in linux or use `localhost` if its works for you
+
+
+### Additionally 
+TO improve efficieny and better artist mapping you can add a `custom tag` for navidrome
+
+Steps : 
+1. locate your `navidrome` folder.
+2. go to `data` folder
+3. Create a `navidrome.toml` file
+4. Add the following
+```bash
+Tags.Artist.Aliases = ["artist", "artists"]
+```
+
+> Note: if you have diffrent tag for your own need, i m currently trying to add that to this, i planned to give a option to add your custom tag
 
 
 ## How It Works
@@ -136,7 +162,17 @@ Added a loging system that logs the info, its purpose is to refine the playlist 
 - This can also be used to get the reason of why script broke
 - By default the scrip is set `INFO` for Main and `DEBUG` for playlist
 - If you want to contirebute you can do so by sumbitting `playlist.jsonl` so that i can make the script better
+ 
 
+### **Library Sync**
+Library sync was intially used to get all the song from navidrome and store it in db for playlist genreation
+
+Changes :
+- Genre auto match : Intitally it was using `genre auto match` function to categories messy or noise genre in one catergory, removed it so that it wont change the db and db will be the `source of truth`
+- Batch updating : Initially it was updating and commiting songs every 5 song creating a massive read and write, - fixed : by adding `batch : 100` for fast sync and `batch : 5` for slow sync(dont want the api result get waste if any error and batch is 100)
+- Delete : if the song is deleted from navidrome during sync delete them from db
+- Diffrance : if the song meta data and db meta data is diffrent taking `navidrome as source of truth` update db to the navidrome
+- Artist : Change artist meta data form `issue #5` to include only artist name 
 
 ## Roadmap & TODO
 

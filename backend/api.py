@@ -28,9 +28,10 @@ from playlist import (
     signalWeights,
     API_push_playlist,
 )
+
+from state import app_state
 import library
 from itunesFuzzy import useFallBackMethods
-
 from genre import readJson, writeJson, DeleteDataJson, autoGenre, sync_database_to_json
 from misc import UpdateDBgenre
 from importPlaylist import fuzzymatching
@@ -38,13 +39,24 @@ from importPlaylist import fuzzymatching
 from threading import Thread
 from fastapi.middleware.cors import CORSMiddleware
 from rich.console import Console
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 console = Console(log_path=False, log_time=False)
 
+allowedOriginsStr = os.getenv('ALLOWED_ORIGINS' , '')
+allowedOrigins = [origin.strip() for origin in allowedOriginsStr.split(",") if origin.strip()]
+
+if not allowedOrigins:
+    allowedOrigins = ["http://localhost:5173"]
+
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "*"],
+    allow_origins=allowedOrigins,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
@@ -841,18 +853,12 @@ def getMonthlyListens():
     return [{"month": row[0], "count": row[1]} for row in rows]
 
 
-_fallbackRunning = False
-_fallbackProcessed = 0
-_fallbackTotal = 0
-_fallbackStop = False
-
 
 @app.post("/api/sync/fallback")
 def syncByFallback(tries: int = 500):
-    global _fallbackRunning, _fallbackProcessed, _fallbackTotal, _fallbackStop
     console.log(f"[cyan]Fallback Sync Triggered[/cyan] (Tries: {tries})")
 
-    if _fallbackRunning:
+    if app_state.fallback_running:
         return {"status": "error", "reason": "Fallback sync already running"}
 
     conn = get_db_connection_lib()
@@ -867,22 +873,21 @@ def syncByFallback(tries: int = 500):
     if not songs:
         return {"status": "ok", "reason": "No notInItunes songs found"}
 
-    _fallbackRunning = True
-    _fallbackProcessed = 0
-    _fallbackTotal = len(songs)
-    _fallbackStop = False
+    app_state.fallback_running = True
+    app_state.fallback_processed = 0
+    app_state.fallback_total = len(songs)
+    app_state.fallback_stop = False
 
     def run():
-        global _fallbackRunning, _fallbackProcessed, _fallbackStop
-        library._fallbackStop = False
         for song in songs:
-            if _fallbackStop:
-                console.log("[yellow]Fallback Sync Stopped[/yellow]")
+            if app_state.fallback_stop:
+                console.log("[yellow]Fallback Sync Stopped by User[/yellow]")
                 break
+            
             result = useFallBackMethods(song, tries)
-            _fallbackProcessed += 1
-        _fallbackRunning = False
-        _fallbackStop = False
+            app_state.fallback_processed += 1
+            
+        app_state.fallback_running = False
 
     Thread(target=run, daemon=True).start()
     return {"status": "ok", "total": len(songs)}
@@ -892,12 +897,12 @@ def syncByFallback(tries: int = 500):
 def fallbackStatus():
     return {
         "status": "ok",
-        "is_running": _fallbackRunning,
-        "processed": _fallbackProcessed,
-        "total": _fallbackTotal,
+        "is_running": app_state.fallback_running,
+        "processed": app_state.fallback_processed,
+        "total": app_state.fallback_total,
         "progress": (
-            round((_fallbackProcessed / _fallbackTotal) * 100)
-            if _fallbackTotal > 0
+            round((app_state.fallback_processed / app_state.fallback_total) * 100)
+            if app_state.fallback_total > 0
             else 0
         ),
     }
@@ -905,10 +910,11 @@ def fallbackStatus():
 
 @app.get("/api/sync/fallback/stop")
 def stopFallback():
-    global _fallbackStop
-    _fallbackStop = True
+    print("fallback stop triggerd")
+    # print(app_state.fallback_stop)
+    app_state.fallback_stop = True
+    # print(app_state.fallback_stop)
     return {"status": "ok"}
-
 
 @app.get("/api/genre/read")
 def readGenre():

@@ -59,12 +59,12 @@ from config import build_url, event_queue
 from db import get_db_connection, init_db, init_db_lib, init_db_usr, init_db_playlist , get_db_connection_lib
 from itunesFuzzy import useFallBackMethods
 import library
-from library import normalise_genre
+from library import normalise_genre , normalise_artist
 from watcher import start_sse
 from misc import push_star
 import uvicorn
 
-from misc import setup_logger
+# from misc import setup_logger
 
 console = Console()
 active = {}
@@ -123,7 +123,7 @@ def Watcher():
                 "user_id": user_id,
                 "title": entry.get("title", ""),
                 "album": entry.get("album", ""),
-                "artist": entry.get("artist", ""),
+                "artist": normalise_artist(entry.get("artist", "")),
                 "genre": normalise_genre(entry.get("genre")),
                 "duration": entry["duration"],
                 "actual_played": 0,
