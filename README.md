@@ -106,6 +106,9 @@ Tags.Artist.Aliases = ["artist", "artists"]
 
 > Note: if you have diffrent tag for your own need, i m currently trying to add that to this, i planned to give a option to add your custom tag
 
+## TODO:
+- after reviewing `playlist.jsonl`, its noticed that skipped songs are being backfilled by the `backfilling script`
+
 
 ## How It Works
 TuneLog uses **Implicit Feedback**. Instead of manual ratings, it watches "Signals" via the Navidrome SSE (Server-Sent Events) stream to judge your interest.
