@@ -1,20 +1,19 @@
 ## watches SSE for event triggers
 
 import requests
-from config import Navidrome_url , login , event_queue 
+from config import Navidrome_url, login, event_queue
 from rich.console import Console
 from state import status_registry
 import time
+
 console = Console()
 
 
 def start_sse():
-    while True:  
+    while True:
         response = None
         try:
-            with console.status(
-                "[bold green]Connecting to Navidrome SSE..."
-            ):
+            with console.status("[bold green]Connecting to Navidrome SSE..."):
                 creds = login()
                 url = f"{Navidrome_url}/api/events?jwt={creds['jwt']}"
 
@@ -48,10 +47,10 @@ def start_sse():
             )
             status_registry.update("SSE", status="retrying", error=str(e))
             time.sleep(5)
-            continue  
+            continue
 
         except Exception as e:
             console.print(f"[bold red]SSE Critical Failure:[/bold red] {e}")
             status_registry.update("SSE", status="crashed", error=str(e))
-            time.sleep(10) 
+            time.sleep(10)
             continue

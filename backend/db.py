@@ -6,6 +6,7 @@ import sqlite3
 import os
 import time
 import functools
+
 # import sqlite3
 from state import status_registry
 
@@ -176,9 +177,9 @@ def db_supervisor(func):
                         status="warning",
                         error=f"Lock detected, retry {attempt+1}",
                     )
-                    time.sleep(1)  
+                    time.sleep(1)
                     continue
-                raise  
+                raise
 
             except Exception as e:
                 status_registry.update("Db", status="crashed", error=str(e))
@@ -188,6 +189,7 @@ def db_supervisor(func):
             "Db", status="crashed", error=f"Final Failure: {last_error}"
         )
         return None
+
     return wrapper
 
 

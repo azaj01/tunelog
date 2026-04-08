@@ -179,6 +179,11 @@ Changes :
 - Diffrance : if the song meta data and db meta data is diffrent taking `navidrome as source of truth` update db to the navidrome
 - Artist : Change artist meta data form `issue #5` to include only artist name 
 
+
+### Notification
+Uses an SSE to report event live to the frontend notification section
+
+
 ## Roadmap & TODO
 
 - [] **Notification Bridge:** Real-time "Now Playing" popups on the React Dashboard.

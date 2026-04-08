@@ -11,7 +11,10 @@ import UserProfilePage from "./pages/userProfile";
 import ManualMarking from "./pages/manualMark";
 import GenreMatch from "./pages/genreMatching";
 import Import from "./pages/import";
+import Notifications from "./pages/notification";
+import { useNotificationStream } from "./hooks/Usenotificationstream";
 export default function App() {
+  useNotificationStream()
   return (
     <>
       <Router>
@@ -26,6 +29,7 @@ export default function App() {
             <Route path="/users/:username" element={<UserProfilePage />} />
             <Route path="/manual" element={<ManualMarking />} />
             <Route path="/genre" element={<GenreMatch />} />
+                      <Route path="/notification" element={<Notifications />} />
 
             <Route path="/import" element={<Import />} />
           </Route>

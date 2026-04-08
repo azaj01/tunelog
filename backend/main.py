@@ -55,14 +55,22 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from rich.console import Console
 from state import status_registry
-from config import build_url, event_queue 
-from db import get_db_connection, init_db, init_db_lib, init_db_usr, init_db_playlist , get_db_connection_lib
+from config import build_url, event_queue
+from db import (
+    get_db_connection,
+    init_db,
+    init_db_lib,
+    init_db_usr,
+    init_db_playlist,
+    get_db_connection_lib,
+)
 from itunesFuzzy import useFallBackMethods
 import library
-from library import normalise_genre , normalise_artist
+from library import normalise_genre, normalise_artist
 from watcher import start_sse
 from misc import push_star
 import uvicorn
+from state import notification_status
 
 # from misc import setup_logger
 
@@ -84,7 +92,9 @@ def Watcher():
 
     for user_id in list(active.keys()):
         if now - active[user_id]["last_seen"] > 600:
-            console.print(f"[blue][STALE] {user_id} flushed: {active[user_id]['title']}")
+            console.print(
+                f"[blue][STALE] {user_id} flushed: {active[user_id]['title']}"
+            )
             log_history(active.pop(user_id))
 
     if not entries:
@@ -93,6 +103,9 @@ def Watcher():
             active[user_id]["last_seen"] = now
             log_history(active.pop(user_id))
             console.print(f"[bold red][STOP] {user_id} stopped")
+            notification_status.songState.append(
+                {"username": user_id, "song": "", "state": "stopped"}
+            )
         return
 
     latest = {}
@@ -113,6 +126,10 @@ def Watcher():
                 f"[bold blue][SAME] {user_id} still playing: {active[user_id]['title']} | played: {round(active[user_id]['actual_played'])}s"
             )
 
+            notification_status.songState.append(
+                {"username": user_id, "song": active[user_id]["title"], "state": "same"}
+            )
+
         else:
             if user_id in active:
                 active[user_id]["actual_played"] += now - active[user_id]["last_seen"]
@@ -130,6 +147,10 @@ def Watcher():
                 "last_seen": now,
             }
             console.print(f"[bold blue][NEW] {user_id} started: {entry['title']}")
+            notification_status.songState.append(
+                {"username": user_id, "song": entry["title"], "state": "start"}
+            )
+            # print(notification_status.songState)
 
     current_users = {entry["username"] for entry in entries}
     for user_id in list(active.keys()):
@@ -175,29 +196,28 @@ def log_history(song):
     percent_played = min(round((played / song["duration"]) * 100), 100)
     signal = signal_system(percent_played, song["song_id"], song["user_id"])
 
-
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-            """
+        """
                 INSERT INTO listens(
                 song_id, title, artist, album, genre, duration, played, percent_played, signal, user_id
                 )
                 VALUES (?,?,?,?,?,?,?,?,?,?)
             """,
-            (
-                song["song_id"],
-                song["title"],
-                song["artist"],
-                song["album"],
-                song["genre"],
-                song["duration"],
-                played,
-                percent_played,
-                signal,
-                song["user_id"],
-            ),
-        )
+        (
+            song["song_id"],
+            song["title"],
+            song["artist"],
+            song["album"],
+            song["genre"],
+            song["duration"],
+            played,
+            percent_played,
+            signal,
+            song["user_id"],
+        ),
+    )
 
     conn.commit()
     conn.close()
@@ -236,27 +256,30 @@ def autoSyncWithFallback():
 
         console.print("[bold green]Fallback sync complete")
     else:
-        console.print("[bold green]Auto sync done. No notInItunes songs — skipping fallback")
+        console.print(
+            "[bold green]Auto sync done. No notInItunes songs — skipping fallback"
+        )
+
 
 def main():
     # print("trying to use logger")
     # setup_logger()
     # Database
-    with console.status("[bold green]Initializing Database ..." ):
+    with console.status("[bold green]Initializing Database ..."):
         try:
             # print("Initializing databse")
             init_db()
             init_db_lib()
             init_db_usr()
             init_db_playlist()
-            status_registry.update("Db" , status="initialized")
+            status_registry.update("Db", status="initialized")
         except Exception as e:
-            status_registry.update("Db", status="crashed" , error=e)
+            status_registry.update("Db", status="crashed", error=e)
             console.print("[bold red]Failed TO Initialize Database")
-    console.print('[bold green]Database Initialized Successfully')
+    console.print("[bold green]Database Initialized Successfully")
 
     with console.status("[bold green]Starting API & Verifying Port 8000..."):
-        try:    
+        try:
             uvicornThread = threading.Thread(
                 target=uvicorn.run,
                 args=("api:app",),
@@ -264,23 +287,31 @@ def main():
                 daemon=True,
             )
             uvicornThread.start()
-            time.sleep(2.0) 
+            time.sleep(2.0)
             if not uvicornThread.is_alive():
-                status_registry.update("uvicorn", status="crashed", error="Port Conflict")
-                console.print("[bold red]API Failed to Bind:[/bold red] Port 8000 is likely already in use.")
-                sys.exit(1) 
+                status_registry.update(
+                    "uvicorn", status="crashed", error="Port Conflict"
+                )
+                console.print(
+                    "[bold red]API Failed to Bind:[/bold red] Port 8000 is likely already in use."
+                )
+                sys.exit(1)
             else:
                 status_registry.update("uvicorn", status="running")
-                console.print("[bold green]API Started & Verified on Port 8000[/bold green]")
+                console.print(
+                    "[bold green]API Started & Verified on Port 8000[/bold green]"
+                )
         except Exception as e:
             status_registry.update("uvicorn", status="crashed", error=str(e))
-            console.print(f"[bold red]API Server Thread Initialization Failed:[/bold red] {e}")
+            console.print(
+                f"[bold red]API Server Thread Initialization Failed:[/bold red] {e}"
+            )
             sys.exit(1)
 
     # Watcher
 
     with console.status("[bold green]Starting Watcher Thread"):
-        try:    
+        try:
             watcherThread = threading.Thread(target=start_sse, daemon=True)
             watcherThread.start()
             time.sleep(2.0)
@@ -294,15 +325,15 @@ def main():
                 sys.exit(1)
             else:
                 status_registry.update("watcher", status="running")
-                console.print(
-                    "[bold green]Watcher Started Succesfully"
-                )
+                console.print("[bold green]Watcher Started Succesfully")
         except Exception as e:
             status_registry.update("watcher", status="crashed", error=str(e))
-            console.print(f"[bold red]Watcher Thread Initialization Failed:[/bold red] {e}")
+            console.print(
+                f"[bold red]Watcher Thread Initialization Failed:[/bold red] {e}"
+            )
             sys.exit(1)
 
-    last_auto_sync_day = None 
+    last_auto_sync_day = None
 
     while True:
         if library._startSyncSong and not library._isSyncing:
@@ -319,15 +350,15 @@ def main():
             current_hour == auto_sync_hour
             and current_day != last_auto_sync_day
             and not library._isSyncing
-            ):
-            console.print(f"[bold blue] Auto sync triggered at {now.strftime('%H:%M')}...")
+        ):
+            console.print(
+                f"[bold blue] Auto sync triggered at {now.strftime('%H:%M')}..."
+            )
             last_auto_sync_day = current_day
-            syncThread = threading.Thread(target=autoSyncWithFallback, daemon=True) 
+            syncThread = threading.Thread(target=autoSyncWithFallback, daemon=True)
             syncThread.start()
         try:
-            event = event_queue.get(
-                timeout=2
-            )  
+            event = event_queue.get(timeout=2)
             if event == "nowPlaying":
                 Watcher()
         except Exception as e:

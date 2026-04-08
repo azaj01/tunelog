@@ -225,6 +225,36 @@ export interface ImportResponse {
   };
 }
 
+
+export type NotificationField = "songState" | "playlist" | "starredSong";
+
+export interface SongStateEvent {
+  username: string;
+  song: string;
+  state: "started" | "stopped";
+}
+
+
+
+export interface PlaylistNotifEvent {
+  username: string;
+  size: number;
+  type: "append" | "regenerate";
+}
+
+export interface StarredSongEvent {
+  username: string;
+  song: string;
+  star: number | string;
+}
+
+export interface NotificationPayload {
+  songState?: SongStateEvent[];
+  playlist?: PlaylistNotifEvent[];
+  starredSong?: StarredSongEvent[];
+}
+
+
 export interface PlaylistCreateRequest {
   username: string[];
   song_ids: string[];
@@ -540,3 +570,25 @@ export async function fetchCreatePlaylistFromIds(
   return res.json();
 }
 
+
+
+
+export function connectNotificationStream(
+  onMessage: (payload: NotificationPayload) => void,
+  onError?: (err: Event) => void
+): EventSource {
+  const es = new EventSource(`${BASE_URL}/notifications/stream`);
+console.log("api called notification/stream")
+  es.onmessage = (event) => {
+    try {
+      const payload: NotificationPayload = JSON.parse(event.data);
+      onMessage(payload);
+    } catch (e) {
+      console.error("[SSE] Failed to parse notification:", e);
+    }
+  };
+
+  if (onError) es.onerror = onError;
+
+  return es;
+}

@@ -1,5 +1,13 @@
 # # This to give frontend api data
 
+
+# Notification apis to implement
+# 1. Who started playling what
+# 2. Last sycned
+# 3. last playlist generated for who
+# 4. last song that got started
+
+
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 import requests
@@ -41,17 +49,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from rich.console import Console
 from dotenv import load_dotenv
 
+import asyncio
+from fastapi.responses import StreamingResponse
+from state import _subscribers, notification_status  
+import json
+
+
 load_dotenv()
 
 app = FastAPI()
 console = Console(log_path=False, log_time=False)
 
-allowedOriginsStr = os.getenv('ALLOWED_ORIGINS' , '')
-allowedOrigins = [origin.strip() for origin in allowedOriginsStr.split(",") if origin.strip()]
+allowedOriginsStr = os.getenv("ALLOWED_ORIGINS", "")
+allowedOrigins = [
+    origin.strip() for origin in allowedOriginsStr.split(",") if origin.strip()
+]
 
 if not allowedOrigins:
     allowedOrigins = ["http://localhost:5173"]
-
 
 
 app.add_middleware(
@@ -853,7 +868,6 @@ def getMonthlyListens():
     return [{"month": row[0], "count": row[1]} for row in rows]
 
 
-
 @app.post("/api/sync/fallback")
 def syncByFallback(tries: int = 500):
     console.log(f"[cyan]Fallback Sync Triggered[/cyan] (Tries: {tries})")
@@ -883,10 +897,10 @@ def syncByFallback(tries: int = 500):
             if app_state.fallback_stop:
                 console.log("[yellow]Fallback Sync Stopped by User[/yellow]")
                 break
-            
+
             result = useFallBackMethods(song, tries)
             app_state.fallback_processed += 1
-            
+
         app_state.fallback_running = False
 
     Thread(target=run, daemon=True).start()
@@ -915,6 +929,7 @@ def stopFallback():
     app_state.fallback_stop = True
     # print(app_state.fallback_stop)
     return {"status": "ok"}
+
 
 @app.get("/api/genre/read")
 def readGenre():
@@ -1009,6 +1024,45 @@ def csvPlaylist(data: csvPlaylist):
         return {"status": str(e)}
 
 
+
+
+
+@app.get("/notifications/stream")
+async def sse_stream():
+    queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    subscriber_entry = (queue, loop)
+    _subscribers.append(subscriber_entry)
+
+    async def event_generator():
+        try:
+            for field in ("songState", "playlist", "starredSong"):
+                existing = list(getattr(notification_status, field))
+                if existing:
+                    payload = json.dumps({field: existing})
+                    yield f"data: {payload}\n\n"
+
+            while True:
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=20)
+                    yield f"data: {data}\n\n"
+
+                    field = list(json.loads(data).keys())[0]
+                    getattr(notification_status, field).clear()
+
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _subscribers.remove(subscriber_entry)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )    
+    
 if __name__ == "__main__":
     init_db()
     init_db_lib()

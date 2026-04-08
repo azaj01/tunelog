@@ -13,11 +13,13 @@
 
 from rapidfuzz import fuzz
 from time import sleep
+
 # from random import shuffle
 import requests
 import re
 import time
 import urllib.parse
+
 # import library
 
 from db import get_db_connection_lib
@@ -333,7 +335,7 @@ def useFallBackMethods(song, tries):
     if app_state.fallback_stop:
         console.log("[bold red]Sync Stopping Command Received (in Fuzzy)[/bold red]")
         return
-    
+
     song_id = song["song_id"]
     console.print(
         f"[bold cyan]Processing:[/bold cyan] {song['title']} | {song['artist']}"

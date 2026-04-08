@@ -12,7 +12,8 @@ import {
   DownloadIcon,
   PencilIcon,
   PageIcon,
-  AudioIcon
+  AudioIcon,
+  InfoIcon
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 
@@ -58,6 +59,11 @@ const navItems: NavItem[] = [
     name: "Genre Matching",
     icon: <PencilIcon />,
     path: "/genre",
+  },
+  {
+    name: "Notifications",
+    icon: <InfoIcon />,
+    path: "/notification",
   },
 ];
 const AppSidebar: React.FC = () => {

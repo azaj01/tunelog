@@ -42,10 +42,12 @@
 import json
 from rapidfuzz import fuzz
 from misc import UpdateDBgenre
-from db import get_db_connection, get_db_connection_lib , db_supervisor
+from db import get_db_connection, get_db_connection_lib, db_supervisor
 from rich.console import Console
+
 # from config import status_registry
 from state import status_registry
+
 console = Console()
 
 FILE_PATH = "./data/genre.json"
