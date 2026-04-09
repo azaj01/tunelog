@@ -35,6 +35,7 @@ from playlist import (
     songSlots,
     signalWeights,
     API_push_playlist,
+    getDataFromDb
 )
 
 from state import app_state
@@ -128,7 +129,6 @@ class csvPlaylist(BaseModel):
 
 VALID_EXPLICIT = {"explicit", "cleaned", "notExplicit"}
 
-
 def GetGenre():
     conn = get_db_connection_lib()
     cursor = conn.cursor()
@@ -137,7 +137,12 @@ def GetGenre():
     ).fetchall()
     conn.close()
 
-    db_genres = [row[0] for row in rows]
+    db_genres = set()
+    for row in rows:
+        if row[0]: 
+            parts = [part.strip() for part in row[0].split(',')]
+            db_genres.update(parts)
+
     data = readJson()
     known_terms = set()
 
@@ -145,14 +150,16 @@ def GetGenre():
         known_terms.add(category.lower())
         for v in values:
             known_terms.add(v.lower())
-
-    unmapped_genres = [g for g in db_genres if g and g.lower() not in known_terms]
+            
+    unmapped_genres = [
+        g for g in db_genres 
+        if g and g.lower() not in known_terms
+    ]
 
     return {
         "status": "success",
-        "genres": unmapped_genres,
+        "genres": sorted(unmapped_genres),
     }
-
 
 @app.get("/api/ping")
 def ping():
@@ -642,10 +649,13 @@ def generatePlaylist(data: PlaylistOptions):
         if data.weights:
             signalWeights(data.weights)
             # print("api signal weight " , data.weights)
-        scores = score_song(username)
+        library , history = getDataFromDb()
+        scores = score_song(username , history_dict=history , library_dict= library)
         unheard, unheard_ratio = get_unheard_songs(scores)
         wildcards = get_wildcard_songs(scores, username)
         playlist, song_signals = build_playlist(
+            library,
+            history,
             scores,
             unheard,
             wildcards,
@@ -654,6 +664,7 @@ def generatePlaylist(data: PlaylistOptions):
             explicit_filter,
             size,
             injection,
+            
         )
         push_playlist(playlist, username, song_signals)
 
@@ -971,7 +982,7 @@ def GetGenreFromDb():
 def autoMatchGenre():
     data = readJson()
     update = autoGenre(data)
-    sync_database_to_json()
+    # sync_database_to_json()
     remaining_data = GetGenre()
     return {"unmapped": remaining_data, "genre_updated": update}
 

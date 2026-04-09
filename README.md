@@ -46,17 +46,13 @@ cd tunelog
 - Backend
 ```bash
 cd backend
-
 pip install -r requirements.txt
-
 python3 main.py
 ```
 - Frontend
 ```bash
 cd frontend
-
 npm install 
-
 npm run dev
 ```
 
@@ -109,7 +105,6 @@ Tags.Artist.Aliases = ["artist", "artists"]
 > Note: if you have diffrent tag for your own need, i m currently trying to add that to this, i planned to give a option to add your custom tag
 
 ## TODO:
-- after reviewing `playlist.jsonl`, its noticed that skipped songs are being backfilled by the `backfilling script`
 
 
 ## How It Works
@@ -134,6 +129,29 @@ TuneLog uses **Implicit Feedback**. Instead of manual ratings, it watches "Signa
 * **Second Chances:** Occasional re-exposure to "Skips" (configurable via UI) to account for changing moods.
 
 - updated check architecture.md
+
+## **Genre injection rework** 
+
+Before genre injection used to get all distcint genre from `tunelog.db` then make ratio , and inject those ratio from `songlist.db`
+
+ - currently it takes genre, (hindi ost, rap) converts  it in hindi ost , rap, gets ratio of hindi ost and rap from listens and inject them
+ - this creates ineficeny, i changed my method of genre mapping, now i dont write genre in db according to genre.json but i take that and
+
+Now : - 
+ - create a `translation` layer in `playlist`, 
+ -  get all `distinct genre`
+ -  use `genre.json` (if there is no genre.json thne use og genre) as refrance and map them , `hindi ost , rap` to `bollywood , rap`
+ -  then using this count ratio, now get all song from library , song id and genre 
+ -  map the genre using genre.json , 
+ -  calculate the unheard song , 
+ -  get the genre needed from the pool , if needed genre are bollywood - songs, rap - 4 songs, and a song has bollywood, rap as the mapped genre, give priorty to iter
+ -  and then decrease the pool bollywood 4 , rap - 3 song, but doing so will create a risk of less song in playlist so we will inject two song of unknown genre, and 
+ -  the rest will go to artist injection(new) , artist injection will do this, take all the artists from listens, then calculate the ratio, finds the artist which
+ -  which is listened the most artist(60%) and least artist(40%) and inject 1 song from the artist and that user has never listened, till the list of artist is exchausted
+ - might encounter multiple artist (badsha , honey signh) , count them as separate artist and separate ratio,
+ - if still pool is empty then god knows what cause i sure dont
+
+
 ---
 
 ### **Auto Genre Match**
