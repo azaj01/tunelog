@@ -104,6 +104,9 @@ Tags.Artist.Aliases = ["artist", "artists"]
 
 > Note: if you have diffrent tag for your own need, i m currently trying to add that to this, i planned to give a option to add your custom tag
 
+## Warning
+- I think i implemented musicbrainz api as it was written in the docs but i got ip blocked, if you are dev, can you review it? if you are user, try using vpn before doing fuzzy matching 
+
 ## TODO:
 - Add Auto playlist reload
 - Add config for all the settings
