@@ -80,7 +80,7 @@ class _ReactiveList(list):
         super().append(item)
         broadcast(self._field, list(self))
 class NotificationStatus:
-    print("function called")
+    # print("function called")
     def __init__(self):
         self.songState   = _ReactiveList("songState")
         self.playlist    = _ReactiveList("playlist")

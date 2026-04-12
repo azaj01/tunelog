@@ -182,9 +182,9 @@ def signal_system(percent_played, song_id, user_id):
             SELECT COUNT(*) FROM listens 
             WHERE song_id = ? AND user_id = ? 
             AND signal IN ('positive', 'repeat')
-            AND timestamp > datetime('now', '-? minutes')
+            AND timestamp > datetime('now', '-{window} minutes')
         """,
-            (song_id, user_id , window ),
+            (song_id, user_id ),
         )
 
         valid_prior_positives = cursor.fetchone()[0]
