@@ -140,6 +140,10 @@ TuneLog uses **Implicit Feedback**. Instead of manual ratings, it watches "Signa
 
 - updated check architecture.md
 
+
+
+## **Gloabal configration**
+Added a page to change the global config of the backend, like every variable that user can use
 ## **Genre injection rework** 
 
 Before genre injection used to get all distcint genre from `tunelog.db` then make ratio , and inject those ratio from `songlist.db`
