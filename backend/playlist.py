@@ -397,7 +397,8 @@ def fill_genre_slots(target_counts, library_dict, heard_ids, alias_to_cat):
         
         priority = len(mapped_cats.intersection(target_counts.keys()))
         unheard_pool.append({'id': sid, 'cats': mapped_cats, 'priority': priority})
-
+    
+    random.shuffle(unheard_pool)
     unheard_pool.sort(key=lambda x: x['priority'], reverse=True)
 
     unknowns = [s for s in unheard_pool if "unknown" in s['cats']][:2]
@@ -622,7 +623,8 @@ def build_playlist(
 
     genre_songs = []
     if injection:
-        heard_so_far = set(song_signals.keys())
+        # heard_so_far = set(song_signals.keys())
+        heard_so_far = set(song_signals.keys()) | set(scores.keys())
         adjusted_unheard_size = unheard_size + leftover        
         alias_to_cat = get_translation_maps(readJSON())
         cat_counts, artist_counts = analyze_user_ratios(user_id, history, alias_to_cat)
@@ -753,7 +755,8 @@ def build_playlist(
         "wildcard": "magenta",
         "unheard": "blue",
     }
-
+    final_playlist = final_ids[:size]
+    random.shuffle(final_playlist) 
     counts = {}
     for sid in final_ids[:size]:
         sig = song_signals.get(sid, "unheard")
