@@ -11,6 +11,8 @@ from starlette.responses import StreamingResponse
 import httpx
 import os
 import asyncio
+from search import searchTable
+import json
 
 NAVIDROME_URL = os.getenv("BASE_URL")
 
@@ -29,7 +31,36 @@ app.add_middleware(
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_all(request: Request, path: str):
     url = f"{NAVIDROME_URL}/{path}"
-    
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    params = dict(request.query_params)
+    searchResponse , searchEndpoint  = await handle_search_logic(path, params)
+
+        
+    if searchEndpoint and searchResponse:
+        count = len(searchResponse)
+        subsonic_response = {
+            "subsonic-response": {
+                "status": "ok",
+                "version": "1.16.1",
+                "searchResult3": {
+                    "song": searchResponse
+                }
+            }
+        }
+        return Response(
+            content=json.dumps(subsonic_response),
+            status_code=200,
+            headers={
+                "X-Total-Count": str(count),
+                "Access-Control-Expose-Headers": "X-Total-Count", 
+            "Content-Type": "application/json"
+            }
+        )
+
+
+
+
     headers = dict(request.headers)
     headers.pop("host", None)
 
@@ -87,3 +118,23 @@ async def proxy_all(request: Request, path: str):
 @app.on_event("shutdown")
 async def shutdown_event():
     await client.aclose()
+    
+    
+    
+async def handle_search_logic(path: str, params: dict):
+    category_map = {
+        "rest/search3": "query", 
+        "api/song": "title",
+        "api/album": "name",   
+        "api/artist": "name"
+    }
+
+    for target_path, param_key in category_map.items():
+        if target_path in path:
+            search_term = params.get(param_key)
+            if search_term:
+                results = searchTable(search_term) 
+                return results, target_path
+            
+            return None, target_path
+    return None, None
