@@ -214,6 +214,7 @@ def init_search_db():
             song_id UNINDEXED, 
             title, 
             artist, 
+            album,
             lyrics,
             tokenize = 'porter unicode61'
         )

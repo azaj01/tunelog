@@ -34,22 +34,25 @@ async def proxy_all(request: Request, path: str):
     headers = dict(request.headers)
     headers.pop("host", None)
     params = dict(request.query_params)
-    searchResponse , searchEndpoint  = await handle_search_logic(path, params)
+    searchResponse , searchEndpoint  = await handle_search_logic(path, params , request)
 
         
     if searchEndpoint and searchResponse:
         count = len(searchResponse)
-        subsonic_response = {
-            "subsonic-response": {
-                "status": "ok",
-                "version": "1.16.1",
-                "searchResult3": {
-                    "song": searchResponse
+        if searchEndpoint == "rest/search3":
+            payload = {
+                "subsonic-response": {
+                    "status": "ok",
+                    "version": "1.16.1",
+                    "searchResult3": {
+                        "song": searchResponse
+                    }
                 }
             }
-        }
+        else :
+            payload = searchResponse
         return Response(
-            content=json.dumps(subsonic_response),
+            content=json.dumps(payload),
             status_code=200,
             headers={
                 "X-Total-Count": str(count),
@@ -119,22 +122,33 @@ async def proxy_all(request: Request, path: str):
 async def shutdown_event():
     await client.aclose()
     
-    
-    
-async def handle_search_logic(path: str, params: dict):
+async def handle_search_logic(path: str, params: dict , request):
     category_map = {
         "rest/search3": "query", 
         "api/song": "title",
         "api/album": "name",   
         "api/artist": "name"
     }
-
+    start = int(params.get("_start" , 0 ))
+    end = int(params.get("_end" , 15))
     for target_path, param_key in category_map.items():
         if target_path in path:
             search_term = params.get(param_key)
+            print("searched using ", target_path , "for " , search_term)
+            
             if search_term:
-                results = searchTable(search_term) 
+                if target_path == "rest/search3":
+                    results =  await searchTable(request , search_term , end , start) 
+                elif target_path == "api/song":
+                    results =  await searchTable(request, search_term , end , start , "song")
+                elif target_path == "api/album":
+                    results =  await searchTable(request, search_term , end , start , "album") 
+                elif target_path == "api/artist":
+                    results =  await searchTable(request, search_term , end , start , "artist") 
+                
+                 
+                
                 return results, target_path
             
-            return None, target_path
+            return None, None
     return None, None

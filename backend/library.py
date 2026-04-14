@@ -241,39 +241,37 @@ def populate_search_index(dbSongs):
     cursor = conn.cursor()
     
     try:
-    
-        song_ids = []
         fts_data = []
         metadata_data = []
 
         for sid, song in dbSongs.items():
             current_lyrics = song.get('lyrics') or ''
             
-            song_ids.append((sid,))
-            fts_data.append((sid, song['title'], song['artist'], current_lyrics))
-            
+            fts_data.append((sid, song['title'], song['artist'], song.get('album'), current_lyrics))
             metadata_data.append((sid, song.get('lyrics')))
 
-        if not song_ids:
+        if not fts_data:
             return
-        cursor.executemany("DELETE FROM song_search_index WHERE song_id = ?", song_ids)
+        cursor.execute("DELETE FROM song_search_index")
         cursor.executemany(
-            "INSERT INTO song_search_index (song_id, title, artist, lyrics) VALUES (?, ?, ?, ?)",
+            "INSERT INTO song_search_index (song_id, title, artist, album, lyrics) VALUES (?, ?, ?, ?, ?)",
             fts_data
         )
         cursor.executemany(
             "INSERT OR REPLACE INTO search_metadata (song_id, lyrics) VALUES (?, ?)",
             metadata_data
         )
-
         conn.commit()
         console.log(f"[bold green]Search Index & Metadata Refreshed:[/bold green] {len(fts_data)} tracks synced.")
+        
         
     except Exception as e:
         console.log(f"[bold red]Indexing Error:[/bold red] {e}")
         conn.rollback()
     finally:
         conn.close()
+        
+
 async def fetch_lyrics_task(client, song_id, semaphore):
     async with semaphore:
         url = build_url("getLyricsBySongId") + f"&id={song_id}&f=json"
@@ -297,10 +295,10 @@ async def fetch_lyrics_task(client, song_id, semaphore):
 async def enrich_search_engine_async():
     conn = get_db_connection_lib()
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT OR IGNORE INTO song_search_index (song_id, title, artist)
-        SELECT song_id, title, artist FROM library
-    """)
+    # cursor.execute("""
+    #     INSERT OR IGNORE INTO song_search_index (song_id, title, artist)
+    #     SELECT song_id, title, artist FROM library
+    # """)
     missing = cursor.execute("""
         SELECT song_id FROM library 
         WHERE song_id NOT IN (SELECT song_id FROM search_metadata WHERE lyrics IS NOT NULL)
@@ -350,7 +348,6 @@ def sync_library():
     songs = fetch_all_song()
     dbSongs = fetchSongFromDB()
     console.print("[bold blue] Trying to update fts and search database")
-    populate_search_index(dbSongs)
     total = len(songs)
 
     fast_sync = not _toggle_itune
@@ -365,16 +362,6 @@ def sync_library():
 
     insert_batch: list[tuple] = []
     update_batch: list[tuple] = []
-
-    # cursor.executemany("""
-    #     UPDATE listens
-    #     SET title = ?,
-    #         artist = ?,
-    #         album = ?
-    # genre = ?
-    #     WHERE song_id = ?
-    # """, data)
-
     def flush_batches():
         formattedInsertdata = [
             (item[1], item[2], item[3], item[4], item[0]) for item in insert_batch
@@ -577,8 +564,6 @@ def sync_library():
     ):
         navidrome_ids = {song["id"] for song in songs}
         remove_deleted_songs(navidrome_ids, set(dbSongs.keys()))
-        # autoGenre()
-        # sync_database_to_json()
 
     _isSyncing = False
 
