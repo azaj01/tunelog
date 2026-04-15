@@ -7,6 +7,7 @@ import os
 import time
 import functools
 
+
 # import sqlite3
 from state import status_registry
 
@@ -120,7 +121,10 @@ def init_db_lib():
             song_id     TEXT PRIMARY KEY,
             title       TEXT,
             artist      TEXT,
+            artistId    TEXT,
+            artistJSON  TEXT,
             album       TEXT,
+            albumId     TEXT, 
             genre       TEXT,
             duration    INTEGER,
             last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -191,6 +195,41 @@ def db_supervisor(func):
         return None
 
     return wrapper
+
+def init_search_db():
+    conn = get_db_connection_lib()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON;")
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS search_metadata (
+            song_id       TEXT PRIMARY KEY,
+            lyrics        TEXT,
+            last_updated  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (song_id) REFERENCES library (song_id) ON DELETE CASCADE
+        )
+    """
+    )
+
+    cursor.execute(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS song_search_index USING fts5(
+            song_id UNINDEXED, 
+            title, 
+            artist, 
+            artistId UNINDEXED,
+            artistJSON UNINDEXED, 
+            album,
+            albumId UNINDEXED, 
+            lyrics,
+            tokenize='unicode61 remove_diacritics 1'
+        )
+    """
+    )
+
+    conn.commit()
+    conn.close()
 
 
 if __name__ == "__main__":

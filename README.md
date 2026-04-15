@@ -1,3 +1,26 @@
+
+
+# TODO
+
+- BYPASS SEARCH : only hijack the search query if it has something other then songid, or an empty parameter, if empty means user is scrolling library, if sond is, then client wants specific song's details like cover and album art
+- ADD NORMALISZATIONS FOR LYRICS, no repeat letters, if its AAAHHH! men it will be ah men ,
+- Find a way to do search for this, MERE NISHAN, when user do ME it should suggest song with user typing full MERE for results 
+
+
+
+# Positives : 
+- Proxy is working
+- Song stream is working
+- Search3 endpoint is working
+- /api/getSong is working
+- /api/album is working
+- /api/artist is working
+
+# Bads : 
+- need to figure out /api/getArtist and getAlbum, one way is to , search album, get the song id, use song id to get album id, then get album info and then send it to frontend, or just create a artist id and album id
+- Symphonifm app doesnt work as it uses its own internal search machenism to search for the song 
+
+
 #  TuneLog
 **A self-hosted music recommendation system for Navidrome.** TuneLog learns your taste by watching how you actually interact with your music tracking skips, finishes, and replays to build evolving, personalized playlists without you ever touching a "Like" button.
 

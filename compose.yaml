@@ -18,6 +18,7 @@ services:
       - .env
     ports:
       - "8000:8000"
+      - "4534:4534"
 
   frontend:
     build:
