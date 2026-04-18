@@ -1,13 +1,6 @@
 # # This to give frontend api data
 
 
-# Notification apis to implement
-# 1. Who started playling what
-# 2. Last sycned
-# 3. last playlist generated for who
-# 4. last song that got started
-
-
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 import requests
@@ -56,10 +49,20 @@ from state import _subscribers, notification_status
 import json
 import re 
 
+import socketio
+
+# sio = socketio.Server()
+# sApp = socketio.WSGIApp(sio)
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+
+app = FastAPI()
+
+socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
+
 
 load_dotenv()
 
-app = FastAPI()
 console = Console(log_path=False, log_time=False)
 
 allowedOriginsStr = os.getenv("ALLOWED_ORIGINS", "")
@@ -1090,13 +1093,277 @@ def SendConfig():
 def update_config(payload: configData):
     # print(payload)
     console.print("[bold blue]Received config update request...")
-    
     success, message = save_config(payload.dict())
-    
     if not success:
         raise HTTPException(status_code=500, detail=message)
-        
     return {"status": "success", "message": "config.json updated"}
+
+
+
+
+from search import searchTable
+
+from jam import sendSongPayload, AddQueue, currentQueue, ClearQueue, songQueue
+
+connected_users = {}
+
+jam_state = {
+    "host_sid": None,
+    "host_name": None,
+    "current_track": None,
+    "is_playing": False,
+    "current_index": 0,
+}
+
+
+def get_queue_ids():
+    q = currentQueue()
+    if isinstance(q, list):
+        return [item.get("id") for item in q if item.get("id")]
+    if isinstance(q, dict):
+        return list(q.keys())
+    return []
+
+
+def resolve_current_index():
+    queue_ids = get_queue_ids()
+    if not queue_ids:
+        return 0, queue_ids
+
+    current_track = jam_state.get("current_track")
+    if current_track in queue_ids:
+        return queue_ids.index(current_track), queue_ids
+
+    return 0, queue_ids
+
+
+@sio.event
+async def connect(sid, environ, auth):
+    print(f"Client connected: {sid}")
+    connected_users[sid] = {"username": "Anonymous", "isHost": False}
+
+    payload = sendSongPayload(jam_state["current_track"]) if jam_state["current_track"] else sendSongPayload()
+    await sio.emit("now_playing", payload, to=sid)
+
+    if jam_state["host_name"]:
+        await sio.emit(
+            "jam_announced",
+            {
+                "hostName": jam_state["host_name"],
+                "trackId": jam_state["current_track"],
+                "isPlaying": jam_state["is_playing"],
+            },
+            to=sid,
+        )
+
+    await sio.emit("queue_update", currentQueue(), to=sid)
+
+
+@sio.event
+async def disconnect(sid):
+    print(f"Client disconnected: {sid}")
+
+    if sid == jam_state["host_sid"]:
+        jam_state["host_sid"] = None
+        jam_state["host_name"] = None
+        jam_state["current_track"] = None
+        jam_state["is_playing"] = False
+        jam_state["current_index"] = 0
+
+        await sio.emit("jam_finished")
+        print("Jam ended — host disconnected")
+
+    connected_users.pop(sid, None)
+
+
+@sio.event
+async def start_jam(sid, data):
+    jam_state["host_sid"] = sid
+    jam_state["host_name"] = data.get("username")
+    jam_state["current_track"] = data.get("trackId")
+    jam_state["is_playing"] = True
+
+    connected_users[sid]["isHost"] = True
+
+    library, history = getDataFromDb()
+    scores = score_song(
+        data.get("username"),
+        history_dict=history,
+        library_dict=library,
+    )
+    unheard, unheard_ratio = get_unheard_songs(scores)
+    wildcards = get_wildcard_songs(scores, data.get("username"))
+
+    playlist, song_signals = build_playlist(
+        library,
+        history,
+        scores,
+        unheard,
+        wildcards,
+        unheard_ratio,
+        data.get("username"),
+        "all",
+        10,
+        False,
+    )
+
+    ClearQueue()
+    for songId in playlist:
+        AddQueue(songId)
+
+    jam_state["current_index"], queue_ids = resolve_current_index()
+    if queue_ids:
+        jam_state["current_track"] = queue_ids[0]
+        jam_state["current_index"] = 0
+
+    payload = sendSongPayload(jam_state["current_track"]) if jam_state["current_track"] else {}
+
+    await sio.emit(
+        "jam_announced",
+        {
+            "hostName": jam_state["host_name"],
+            "trackId": jam_state["current_track"],
+            "isPlaying": True,
+        },
+    )
+
+    await sio.emit("now_playing", payload)
+    await sio.emit("queue_update", currentQueue())
+
+    print(f"Jam started by: {jam_state['host_name']}")
+
+
+@sio.event
+async def get_queue(sid):
+    await sio.emit("queue_update", currentQueue(), to=sid)
+
+
+@sio.event
+async def add_queue(sid, data):
+    print(data)
+    AddQueue(
+        data["song_id"],
+        data.get("title"),
+        data.get("artist", "Unknown"),
+    )
+    curennt = currentQueue()
+    print("current : " , curennt)
+    await sio.emit("queue_update", curennt)
+
+
+
+@sio.event
+async def clear_queue(sid):
+    ClearQueue()
+    await sio.emit("queue_update", currentQueue())
+
+
+@sio.event
+async def stop_jam(sid):
+    if sid != jam_state["host_sid"]:
+        return
+
+    jam_state["host_sid"] = None
+    jam_state["host_name"] = None
+    jam_state["current_track"] = None
+    jam_state["is_playing"] = False
+    jam_state["current_index"] = 0
+
+    connected_users[sid]["isHost"] = False
+
+    await sio.emit("jam_finished")
+    print("Jam stopped by host")
+
+
+@sio.event
+async def jam_play(sid):
+    if sid != jam_state["host_sid"]:
+        return
+
+    jam_state["is_playing"] = True
+    await sio.emit("jam_playback", {"isPlaying": True})
+
+    print("Broadcast play to all users")
+
+
+@sio.event
+async def jam_pause(sid):
+    if sid != jam_state["host_sid"]:
+        return
+
+    jam_state["is_playing"] = False
+    await sio.emit("jam_playback", {"isPlaying": False})
+
+    print("Broadcast pause to all users")
+
+
+@sio.event
+async def jam_next(sid):
+    if sid != jam_state["host_sid"]:
+        return
+
+    queue_ids = get_queue_ids()
+    if not queue_ids:
+        return
+
+    if jam_state["current_track"] in queue_ids:
+        current_index = queue_ids.index(jam_state["current_track"])
+        next_index = (current_index + 1) % len(queue_ids)
+    else:
+        next_index = 0
+
+    next_track_id = queue_ids[next_index]
+    jam_state["current_track"] = next_track_id
+    jam_state["current_index"] = next_index
+    jam_state["is_playing"] = True
+
+    payload = sendSongPayload(next_track_id)
+
+    await sio.emit("now_playing", payload)
+    await sio.emit("jam_playback", {"isPlaying": True})
+    await sio.emit("queue_update", currentQueue())
+
+    print(f"Next track broadcasted: {next_track_id}")
+
+
+@sio.event
+async def jam_prev(sid):
+    if sid != jam_state["host_sid"]:
+        return
+
+    queue_ids = get_queue_ids()
+    if not queue_ids:
+        return
+
+    if jam_state["current_track"] in queue_ids:
+        current_index = queue_ids.index(jam_state["current_track"])
+        prev_index = (current_index - 1) % len(queue_ids)
+    else:
+        prev_index = 0
+
+    prev_track_id = queue_ids[prev_index]
+    jam_state["current_track"] = prev_track_id
+    jam_state["current_index"] = prev_index
+    jam_state["is_playing"] = True
+
+    payload = sendSongPayload(prev_track_id)
+
+    await sio.emit("now_playing", payload)
+    await sio.emit("jam_playback", {"isPlaying": True})
+    await sio.emit("queue_update", currentQueue())
+
+    print(f"Previous track broadcasted: {prev_track_id}")
+
+
+@sio.event
+async def sync_time(sid, data):
+    if sid != jam_state["host_sid"]:
+        return
+
+    await sio.emit("sync_room_time", {
+        "positionMs": data.get("positionMs"),
+    })
+
 
 if __name__ == "__main__":
     init_db()

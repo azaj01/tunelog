@@ -292,7 +292,7 @@ def main():
         try:
             uvicornThread = threading.Thread(
                 target=uvicorn.run,
-                args=("api:app",),
+                args=("api:socket_app",),
                 kwargs={"host": "0.0.0.0", "port": 8000, "log_level": "warning"},
                 daemon=True,
             )

@@ -13,6 +13,15 @@ import GenreMatch from "./pages/genreMatching";
 import Import from "./pages/import";
 import Notifications from "./pages/notification";
 import Config from "./pages/config";
+// import QueuePage from "./pages/Jam/QueuePage";
+// import QueuePanel from "./pages/Jam/Queue";
+// import Jam from "./pages/jam";
+// import QueuePage from "./pages/Jam/Queue";
+// import QueuePage from "./pages/Jam/Queue";
+// import Jam from "./pages/Jam/jam";
+import Queue from "./pages/Jam/Queue";
+import NowPlaying from "./pages/Jam/NowPlaying";
+
 import { useNotificationStream } from "./hooks/Usenotificationstream";
 export default function App() {
   useNotificationStream()
@@ -32,6 +41,13 @@ export default function App() {
             <Route path="/genre" element={<GenreMatch />} />
             <Route path="/notification" element={<Notifications />} />
             <Route path="/config" element={<Config />} />
+            <Route path="/nowplaying" element={<NowPlaying />} />
+            
+            {/* <Route path="/jam" element={<Jam />} /> */}
+
+
+            <Route path="/queue" element={<Queue />} />
+            {/* <Route path="/queue" element={<QueuePanel />} /> */}
 
             <Route path="/import" element={<Import />} />
           </Route>

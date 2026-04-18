@@ -1,5 +1,24 @@
 const BASE_URL = import.meta.env.VITE_API_URL;
 
+import { io , Socket } from "socket.io-client";
+
+// socket for jam  
+
+export const socket: Socket = io("http://192.168.29.118:8000", {
+  autoConnect: true,
+  transports: ["websocket"],
+});
+
+export function connectSocket(token: string) {
+  socket.auth = { token };
+  if (!socket.connected) socket.connect();
+}
+
+export function disconnectSocket() {
+  if (socket.connected) socket.disconnect();
+}
+
+
 export interface Stats {
   total_songs: number;
   total_listens: number;

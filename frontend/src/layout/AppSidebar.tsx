@@ -44,6 +44,7 @@ const navItems: NavItem[] = [
     name: "Playlist",
     path: "/playlist",
   },
+
   {
     icon: <PageIcon />,
     name: "Library",
@@ -52,6 +53,15 @@ const navItems: NavItem[] = [
       { name: "Import", path: "/import" },
     ],
   },
+  {
+    icon: <PageIcon />,
+    name: "Jam",
+    subItems: [
+      { name: "Now Playing", path: "/nowplaying" },
+      { name: "Queues", path: "/queue" },
+    ],
+  },
+
   {
     icon: <TweakIcon />,
     name: "Tweaks",

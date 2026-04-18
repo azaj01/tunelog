@@ -10,3 +10,4 @@ rich
 loguru
 asyncio
 httpx
+python_socketio==5.16.1
