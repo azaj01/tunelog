@@ -148,7 +148,11 @@ Tags.Artist.Aliases = ["artist", "artists"]
 - use my dashboard for play pause skip
 - basic idea: a host starts navidrome and my tunelog, users joing using the tunelog proxy,host starts a radio , users can add and delete queues , skip play and pause
 
-
+## FUTURE PLANS
+- Navidrome Jam(currently working)
+- Use librosa to find audio mood
+- A way to inject custom queue in client side apps like [Vibrdrome](https://web.vibrdrome.io/) to make it behave the way i want, probally a chromium extenstion for dynamically changing songs playlist
+- Translate lyrics of one language to other or translate query to all laungages to break the language barrier in search history , like to search a japanese song
 
 ## TODO:
 - ADD : when sse event = library sync, do sync in tunelog too
