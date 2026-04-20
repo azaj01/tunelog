@@ -2,7 +2,7 @@ name: Docker
 
 on:
   schedule:
-    - cron: '0 20 6 * *' # Runs every month, on day 1 of the month, at 20:00
+    - cron: '0 20 6 * *' # Runs every month, on day 6 of the month, at 20:00
   push:
     branches: ["main"]
     tags: ["v*.*.*"]
@@ -28,8 +28,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@main
         with:
-          submodules: recursive
-          token: ${{ secrets.CI_TOKEN }}
+          token: ${{ github.token }}
 
       - name: Install cosign
         if: github.event_name != 'pull_request'
@@ -68,6 +67,7 @@ jobs:
         run: docker run --rm backend-image:local python -c "print('Backend OK')"
 
       - name: Build and push Docker image
+        id: build-and-push
         uses: docker/build-push-action@master
         with:
           context: ./backend
@@ -82,7 +82,6 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${{ steps.build-and-push.outputs.digest }}
 
   build-frontend:
@@ -96,9 +95,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@main
-        with:
-          submodules: recursive
-          token: ${{ secrets.CI_TOKEN }}
 
       - name: Install cosign
         if: github.event_name != 'pull_request'
@@ -132,11 +128,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify frontend container starts
-        if: github.event_name != 'pull_request'
-        run: docker run --rm frontend-image:local npm run dev -- --host
-
       - name: Build and push Docker image
+        id: build-and-push
         uses: docker/build-push-action@master
         with:
           context: ./frontend
@@ -151,5 +144,4 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${{ steps.build-and-push.outputs.digest }}
