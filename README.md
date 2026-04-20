@@ -12,13 +12,16 @@ It is recommened to delete or alter the existing database to inculde the changes
 Changes : two new tables in songlist.db,  
 - in library table, new colmns : `artistId` ,  `albumId` , `artistJSON`
 
-**Library Auto Sync** - (default on) After Navidrome is done `scanning(quick or full)` Tunelog's Library Sync will start(itunes api : off)  to quickly add that in database so it wont affect `search results`
   
 The new update includes a proxy layer between navidrome and the client,
 - It can improve search results
 - Added a new `lyrics` search option, when you search songs, with the lyrics, if the song has lyrics it will be in the results
 - Using the `tunelog` history of listens, the search results can be ranked.
 - A improved searches for songs like `AAAHHHHA! MEN` now you only need to type `ah Men` for the result
+
+
+**Library Auto Sync** - (default on) After Navidrome is done `scanning(quick or full)` Tunelog's Library Sync will start(itunes api : off)  to quickly add that in database so it wont affect `search results`
+
 
 ## Proxy :
 Proxy layer is optional, but recommened, I am planning future updates based on the proxy layer
