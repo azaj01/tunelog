@@ -11,6 +11,8 @@
 It is recommened to delete or alter the existing database to inculde the changes
 Changes : two new tables in songlist.db,  
 - in library table, new colmns : `artistId` ,  `albumId` , `artistJSON`
+
+**Library Auto Sync** - (default on) After Navidrome is done `scanning(quick or full)` Tunelog's Library Sync will start(itunes api : off)  to quickly add that in database so it wont affect `search results`
   
 The new update includes a proxy layer between navidrome and the client,
 - It can improve search results
