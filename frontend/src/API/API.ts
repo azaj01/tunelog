@@ -220,8 +220,8 @@ export interface GenreListResponse {
 }
 export interface AutoMatchResponse {
   status: string;
-  unmapped: GenreListResponse; 
-  genre_updated: number; 
+  unmapped: GenreListResponse;
+  genre_updated: number;
 }
 
 export interface ImportResponse {
@@ -244,7 +244,6 @@ export interface ImportResponse {
   };
 }
 
-
 export type NotificationField = "songState" | "playlist" | "starredSong";
 
 export interface SongStateEvent {
@@ -252,8 +251,6 @@ export interface SongStateEvent {
   song: string;
   state: "started" | "stopped";
 }
-
-
 
 export interface PlaylistNotifEvent {
   username: string;
@@ -272,7 +269,6 @@ export interface NotificationPayload {
   playlist?: PlaylistNotifEvent[];
   starredSong?: StarredSongEvent[];
 }
-
 
 export interface PlaylistCreateRequest {
   username: string[];
@@ -315,6 +311,7 @@ export interface SyncAndAutomationConfig {
   auto_sync_hour: number;
   timezone: string;
   use_itunes_fallback: boolean;
+  auto_sync_after_navidrome: boolean;
 }
 
 export interface ApiAndPerformanceConfig {
@@ -489,12 +486,19 @@ export async function fetchPlaylistGenerate(
   size: number = 50,
   slots?: Record<string, number>,
   weights?: Record<string, number>,
-  injection:boolean = true
+  injection: boolean = true,
 ): Promise<PlaylistGenerateResponse> {
   const res = await fetch(`${BASE_URL}/api/playlist/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, explicit_filter, size, slots, weights , injection}),
+    body: JSON.stringify({
+      username,
+      explicit_filter,
+      size,
+      slots,
+      weights,
+      injection,
+    }),
   });
   if (!res.ok) throw new Error("Failed to generate playlist");
   return res.json();
@@ -506,13 +510,20 @@ export async function appendPlaylist(
   size: number = 50,
   slots?: Record<string, number>,
   weights?: Record<string, number>,
-  injection: boolean = true
+  injection: boolean = true,
 ): Promise<PlaylistGenerateResponse> {
   try {
     const res = await fetch(`${BASE_URL}/api/playlist/append`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, explicit_filter, size, slots, weights , injection}),
+      body: JSON.stringify({
+        username,
+        explicit_filter,
+        size,
+        slots,
+        weights,
+        injection,
+      }),
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     return res.json();
@@ -623,7 +634,6 @@ export async function autoMatchGenres(): Promise<AutoMatchResponse> {
   return res.json();
 }
 
-
 export async function fetchImportCSV(file: File): Promise<ImportResponse> {
   const formData = new FormData();
   formData.append("file", file);
@@ -631,7 +641,6 @@ export async function fetchImportCSV(file: File): Promise<ImportResponse> {
   const res = await fetch(`${import.meta.env.VITE_API_URL}/api/import/csv`, {
     method: "POST",
     body: formData,
-  
   });
 
   if (!res.ok) throw new Error("Failed to upload CSV");
@@ -639,27 +648,27 @@ export async function fetchImportCSV(file: File): Promise<ImportResponse> {
 }
 
 export async function fetchCreatePlaylistFromIds(
-  data: PlaylistCreateRequest
+  data: PlaylistCreateRequest,
 ): Promise<{ status: string; message: string; reason?: string }> {
-  const res = await fetch(`${import.meta.env.VITE_API_URL}/api/import/csvPlaylist`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  console.log(data)
+  const res = await fetch(
+    `${import.meta.env.VITE_API_URL}/api/import/csvPlaylist`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+  console.log(data);
   if (!res.ok) throw new Error("Failed to create playlist");
   return res.json();
 }
 
-
-
-
 export function connectNotificationStream(
   onMessage: (payload: NotificationPayload) => void,
-  onError?: (err: Event) => void
+  onError?: (err: Event) => void,
 ): EventSource {
   const es = new EventSource(`${BASE_URL}/notifications/stream`);
-console.log("api called notification/stream")
+  console.log("api called notification/stream");
   es.onmessage = (event) => {
     try {
       const payload: NotificationPayload = JSON.parse(event.data);
@@ -674,14 +683,15 @@ console.log("api called notification/stream")
   return es;
 }
 
-
 export async function fetchGetConfig(): Promise<TuneConfig> {
   const res = await fetch(`${BASE_URL}/api/config`);
   if (!res.ok) throw new Error("Failed to fetch configuration");
   return res.json();
 }
 
-export async function fetchUpdateConfig(data: TuneConfig): Promise<UpdateConfigResponse> {
+export async function fetchUpdateConfig(
+  data: TuneConfig,
+): Promise<UpdateConfigResponse> {
   const res = await fetch(`${BASE_URL}/api/config/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
