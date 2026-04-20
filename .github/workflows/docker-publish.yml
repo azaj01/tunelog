@@ -2,7 +2,7 @@ name: Docker
 
 on:
   schedule:
-    - cron: '0 20 6 * *' # Runs every month, on day 6 of the month, at 20:00
+    - cron: '0 20 1 * *' # Runs every month on the firs day of the month at 20:00
   push:
     branches: ["main"]
     tags: ["v*.*.*"]
