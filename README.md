@@ -43,10 +43,29 @@ It is recommened to run both servers in `same computer` or will might see `laten
 * **Docker & Docker Compose** (Recommended) OR **Python 3.10+**.
 * A Navidrome client that supports scrobbling/Now Playing reporting.
 
-### 2. Installation (Docker - Recommended)
+### 2. Installation
 >  **Critical:** Docker and manual runs (`python main.py`) are mutually exclusive. Docker marks the `data/` folder as `rootowned`. If you switch between them, run `sudo chown -R $USER:$USER data/` to fix permissions.
 
-### DOCKER
+#### Option A: Use published Docker images (recommended)
+
+1. Create a folder and download the environment template:
+   ```bash
+   mkdir tunelog && cd tunelog
+   curl -o .env https://raw.githubusercontent.com/adiiverma40/tunelog/main/.env.example
+   curl -o ghcr-compose.yaml https://raw.githubusercontent.com/adiiverma40/tunelog/main/ghcr-compose.yaml
+   ```
+
+2. Edit the `.env` file with your Navidrome URL and Admin credentials.
+
+3. Launch the stack:
+   ```bash
+   docker compose -f ghcr-compose.yaml up -d
+   ```
+
+* **Web UI:** `http://localhost:5173`
+* **API Server:** `http://localhost:8000`
+
+#### Option B: Build from Source
 - This will create two containers, use manual way if you dont want that
 
 ```bash
@@ -66,9 +85,7 @@ docker compose up --build
 * **Proxy** `http://localhost:4534`
 * **API Server:** `http://localhost:8000`
 
----
-
-### Manual
+#### Option C: Manual (Without Docker)
 - Use this if you dont want to run two containers
 
 ```bash
@@ -94,12 +111,12 @@ by default port `5173` of localhost is allowed to access the backend api, to add
 
 ```bash
 #Navidrome Server
-BASE_URL=http://192.168.29.118:4533 #Chnage your ip 
-ADMIN_USERNAME=adii # change username
+BASE_URL=http://192.168.29.118:4533 # Change your ip 
+ADMIN_USERNAME=adii # Change username
 ADMIN_PASSWORD=1234 # Change password
 
 # Frontend / API
-VITE_API_URL=http://192.168.29.118:8000 # change ip
+VITE_API_URL=http://192.168.29.118:8000 # Change ip
 MY_DOMAIN=localhost
 
 
