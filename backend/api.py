@@ -1096,6 +1096,11 @@ def update_config(payload: configData):
     return {"status": "success", "message": "config.json updated"}
 
 
+# ====================================================================
+# JAM
+# ========================================================
+
+
 from jam import (
     sendSongPayload,
     AddQueue,
@@ -1114,10 +1119,12 @@ jam_state = {
     "is_playing": False,
 }
 
+jamConfig = tune_config["jam"]
+
 
 @sio.event
 async def connect(sid, environ, auth):
-    print(f"Client connected: {sid}")
+    console.print(f"[bold white]Client connected: {sid}")
     connected_users[sid] = {"username": "Anonymous", "isHost": False}
 
     track_id = jam_state.get("current_track")
@@ -1143,7 +1150,7 @@ async def connect(sid, environ, auth):
 
 @sio.event
 async def disconnect(sid):
-    print(f"Client disconnected: {sid}")
+    console.print(f"[bold red]Client disconnected: {sid}")
 
     if sid == jam_state["host_sid"]:
         jam_state["host_sid"] = None
@@ -1152,7 +1159,7 @@ async def disconnect(sid):
         jam_state["is_playing"] = False
 
         await sio.emit("jam_finished")
-        print("Jam ended — host disconnected")
+        console.print("[bold red]Jam ended — host disconnected")
 
     connected_users.pop(sid, None)
 
@@ -1213,7 +1220,7 @@ async def start_jam(sid, data):
     await sio.emit("now_playing", payload)
     await sio.emit("queue_update", currentQueue())
 
-    print(f"Jam started by: {jam_state['host_name']}")
+    console.print(f"[bold blue]Jam started by: {jam_state['host_name']}")
 
 
 @sio.event
@@ -1232,7 +1239,33 @@ async def add_queue(sid, data):
 
 
 @sio.event
+async def reorder_queue(sid, data):
+    # print(jamConfig)
+    if jamConfig["only_host_change_queue"]:
+        if jam_state["host_sid"] != sid:
+            console.print("[bold red]Unauthorized reorder attempt")
+            return
+
+    console.print("[bold green]Reordering queue")
+    ClearQueue()
+    for item in data:
+        AddQueue(
+            item["song_id"],
+            item.get("title"),
+            item.get("artist", "Unknown"),
+        )
+    await sio.emit("queue_update", currentQueue())
+
+
+@sio.event
 async def clear_queue(sid):
+
+    if jamConfig["only_host_clear_queue"]:
+        if jam_state["host_sid"] != sid:
+            console.print("[bold red]Unauthorized Clear attempt")
+            return
+
+    console.print("[bold yellow]Clearing Queue")
     ClearQueue()
     jam_state["current_track"] = None
     jam_state["is_playing"] = False
@@ -1253,7 +1286,7 @@ async def stop_jam(sid):
     connected_users[sid]["isHost"] = False
 
     await sio.emit("jam_finished")
-    print("Jam stopped by host")
+    console.print("[bold yellow]Jam stopped by host")
 
 
 @sio.event

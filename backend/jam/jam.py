@@ -1,10 +1,13 @@
-
-
-
 import os
 from dotenv import load_dotenv
 import requests
 import time
+from state import tune_config
+from rich.console import Console
+
+console = Console()
+
+jamConfig = tune_config["jam"]
 
 load_dotenv()
 
@@ -16,11 +19,29 @@ songQueue = {}
 future_queue_ids = []
 past_queue_ids = []
 
+
+def log_info(message):
+    console.print(f"[bold cyan]{message}[/bold cyan]")
+
+
+def log_success(message):
+    console.print(f"[bold green]{message}[/bold green]")
+
+
+def log_warning(message):
+    console.print(f"[bold yellow]{message}[/bold yellow]")
+
+
+def log_error(message):
+    console.print(f"[bold red]{message}[/bold red]")
+
+
 def getStream(id):
     return (
         f"{NAVIDROME_URL}/rest/stream?id={id}"
         f"&u={ADMIN_USERNAME}&p={ADMIN_PASSWORD}&v=1.16.1&c=tunelog&f=json"
     )
+
 
 def getSongDetails(id):
     url = (
@@ -32,11 +53,13 @@ def getSongDetails(id):
     json_data = request.json()
     return json_data["subsonic-response"]["song"]
 
+
 def getAlbumCover(id):
     return (
         f"{NAVIDROME_URL}/rest/getCoverArt?id={id}"
         f"&u={ADMIN_USERNAME}&p={ADMIN_PASSWORD}&v=1.16.1&c=tunelog&f=json"
     )
+
 
 def _format_queue_item(song_id):
     item = songQueue.get(song_id, {})
@@ -52,14 +75,22 @@ def _format_queue_item(song_id):
         "streamUrl": item.get("streamUrl"),
     }
 
+
 def currentQueue():
     return [_format_queue_item(sid) for sid in future_queue_ids]
+
 
 def pastQueue():
     return [_format_queue_item(sid) for sid in past_queue_ids]
 
+
 def AddQueue(song_id, title=None, user="Unknown"):
     try:
+        if not jamConfig["same_song_in_queue"]:
+            if song_id in future_queue_ids:
+                log_warning("Song already in queue")
+                return
+
         song = getSongDetails(song_id)
         cover_art_id = song.get("coverArt")
         title = song.get("title", title or "Unknown Track")
@@ -80,7 +111,8 @@ def AddQueue(song_id, title=None, user="Unknown"):
             "streamUrl": stream_url,
         }
         future_queue_ids.append(song_id)
-        print(f"Added to Future Queue: {title} (ID: {song_id})")
+        log_success(f"Added to Future Queue: {title} (ID: {song_id})")
+
     except Exception as e:
         songQueue[song_id] = {
             "title": title or "Unknown Track",
@@ -92,24 +124,28 @@ def AddQueue(song_id, title=None, user="Unknown"):
             "streamUrl": getStream(song_id),
         }
         future_queue_ids.append(song_id)
-        print(f"Added fallback queue item for {song_id}: {e}")
+        log_error(f"Added fallback queue item for {song_id}: {e}")
+
 
 def DeleteQueue(song_id):
     if song_id in future_queue_ids:
         future_queue_ids.remove(song_id)
     if song_id in past_queue_ids:
         past_queue_ids.remove(song_id)
+
     removed_song = songQueue.pop(song_id, None)
     if removed_song:
-        print(f"Deleted: {removed_song['title']}")
+        log_success(f"Deleted: {removed_song['title']}")
     else:
-        print(f"Error: ID {song_id} not found in queue.")
+        log_error(f"ID {song_id} not found in queue")
+
 
 def ClearQueue():
     songQueue.clear()
     future_queue_ids.clear()
     past_queue_ids.clear()
-    print("Queues cleared")
+    log_info("Queues cleared")
+
 
 def sendSongPayload(id):
     song = getSongDetails(id)

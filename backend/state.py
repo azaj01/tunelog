@@ -128,7 +128,7 @@ DEFAULT_CONFIG = {
         "auto_sync_hour": 2,
         "timezone": "Asia/Kolkata",
         "use_itunes_fallback": False,
-        "auto_sync_after_navidrome": True,   ## for auto syncing after navidrome sync library
+        "auto_sync_after_navidrome": True,  ## for auto syncing after navidrome sync library
     },
     "api_and_performance": {
         "max_fuzzy_iterations": 500,
@@ -141,6 +141,11 @@ DEFAULT_CONFIG = {
             "genre_map_strictness": 95,
             "duration_tolerance_pct": 10,
         },
+    },
+    "jam": {
+        "same_song_in_queue": False,
+        "only_host_change_queue": False,
+        "only_host_clear_queue": True,
     },
 }
 
