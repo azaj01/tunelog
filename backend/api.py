@@ -1,7 +1,9 @@
 # # This to give frontend api data
 
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from pathlib import Path
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import requests
 import os
@@ -48,19 +50,21 @@ from fastapi.responses import StreamingResponse
 from state import _subscribers, notification_status
 import json
 import re
-
 import socketio
+load_dotenv()
 
-# sio = socketio.Server()
-# sApp = socketio.WSGIApp(sio)
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+CONFIG_DIR = "./config/users"
+
+save_dir = Path(CONFIG_DIR)
+save_dir.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI()
-
+app.mount("/avatars" , StaticFiles(directory=CONFIG_DIR) , name="avatars")
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 
-load_dotenv()
+SERVER_URL = os.getenv("VITE_API_URL" , "http://localhost:8000")
 
 console = Console(log_path=False, log_time=False)
 
@@ -140,6 +144,165 @@ class configData(BaseModel):
 VALID_EXPLICIT = {"explicit", "cleaned", "notExplicit"}
 
 
+@app.post("/api/user/profile/update")
+async def update_user_profile(
+    username: str = Form(...),
+    displayName: str = Form(...),
+    avatar: UploadFile = File(None),
+):
+    try:
+        save_dir = Path(CONFIG_DIR)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        avatar_db_path = None 
+        full_avatar_url = None
+
+        if avatar and avatar.filename:
+            extension = Path(avatar.filename).suffix
+            filename = f"{username}{extension}"
+            target_file = save_dir / filename
+            
+            with open(target_file, "wb") as buffer:
+                shutil.copyfileobj(avatar.file, buffer)
+            
+            avatar_db_path = f"/avatars/{filename}"
+            
+            full_avatar_url = f"{SERVER_URL.rstrip('/')}{avatar_db_path}"
+        conn = get_db_connection_usr()
+        if avatar_db_path:
+            conn.execute(
+                "UPDATE user SET name=?, avatar=? WHERE username=?",
+                (displayName, avatar_db_path, username),
+            )
+        else:
+            conn.execute(
+                "UPDATE user SET display_name=? WHERE username=?",
+                (displayName, username),
+            )
+            
+            cursor = conn.execute("SELECT avatar_path FROM user WHERE username=?", (username,))
+            row = cursor.fetchone()
+            if row and row['avatar_path']:
+                full_avatar_url = f"{SERVER_URL.rstrip('/')}{row['avatar_path']}"
+                
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "success",
+            "user": {
+                "username": username,
+                "displayName": displayName,
+                "avatarUrl": full_avatar_url,
+            },
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/get-users")
+def getUsers(data: AdminAuth):
+    token = getJWT(data.admin, data.adminPD)
+    if not token:
+        return {"status": "failed", "reason": "Invalid admin credentials"}
+
+    conn = get_db_connection_usr()
+    users = conn.execute("SELECT * FROM user").fetchall()
+    conn.close()
+
+    user_list = []
+    for row in users:
+        user_dict = dict(row)
+        avatar_path = user_dict.get("avatar")
+        avatar_url = f"{SERVER_URL.rstrip('/')}{avatar_path}" if avatar_path else None
+
+        user_list.append({
+            "username": user_dict.get("username"),
+            "password": user_dict.get("password"), 
+            "isAdmin": bool(user_dict.get("isAdmin")),
+            "name": user_dict.get("name"),
+            "avatarUrl": avatar_url
+        })
+
+    return {
+        "status": "ok",
+        "users": user_list,
+    }
+
+# @app.post("/admin/get-users")
+# def getUsers(data: AdminAuth):
+#     token = getJWT(data.admin, data.adminPD)
+#     if not token:
+#         return {"status": "failed", "reason": "Invalid admin credentials"}
+
+#     conn = get_db_connection_usr()
+#     users = conn.execute("SELECT * FROM user").fetchall()
+#     conn.close()
+
+#     return {
+#         "status": "ok",
+#         "users": [
+#             {
+#                 "username": row["username"],
+#                 "password": row["password"],
+#                 "isAdmin": bool(row["isAdmin"]),
+#                 "name" : row['name', None],
+#                 "avatarUrl" : f"{SERVER_URL.rstrip('/')}{row["avatar" , ""]}"
+                
+                
+#             }
+#             for row in users
+#         ],
+#     }
+
+
+@app.get("/admin/getUserData")
+def getUserData(username: str = "", password: str = ""):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if username != "" and password != "":
+        rows = cursor.execute(
+            """
+            SELECT signal, COUNT(signal) 
+            FROM listens 
+            WHERE user_id = ? 
+            GROUP BY signal;
+            """,
+            (username,),
+        ).fetchall()
+
+        stats_map = {row[0]: row[1] for row in rows}
+
+        lastTimeStamp = cursor.execute(
+            """
+            SELECT timestamp 
+            FROM listens 
+            WHERE user_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT 1
+            """,
+            (username,),
+        ).fetchone()
+        last_log = lastTimeStamp[0] if lastTimeStamp else "never"
+
+        total_listens = sum(stats_map.values())
+        conn.close()
+
+        return {
+            "status": "ok",
+            "totalListens": total_listens,
+            "skips": stats_map.get("skip", 0),
+            "repeat": stats_map.get("repeat", 0),
+            "complete": stats_map.get("positive", 0),
+            "partial": stats_map.get("partial", 0),
+            "lastLogged": last_log,
+        }
+    else:
+        conn.close()
+        return {"status": "failed , username required"}
+
+
+    
 def GetGenre():
     conn = get_db_connection_lib()
     cursor = conn.cursor()
@@ -410,75 +573,6 @@ def createUser(data: CreateUserData):
 
     conn.close()
     return {"status": "failed", "reason": "Invalid input"}
-
-
-@app.post("/admin/get-users")
-def getUsers(data: AdminAuth):
-    token = getJWT(data.admin, data.adminPD)
-    if not token:
-        return {"status": "failed", "reason": "Invalid admin credentials"}
-
-    conn = get_db_connection_usr()
-    users = conn.execute("SELECT * FROM user").fetchall()
-    conn.close()
-
-    return {
-        "status": "ok",
-        "users": [
-            {
-                "username": row["username"],
-                "password": row["password"],
-                "isAdmin": bool(row["isAdmin"]),
-            }
-            for row in users
-        ],
-    }
-
-
-@app.get("/admin/getUserData")
-def getUserData(username: str = "", password: str = ""):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    if username != "" and password != "":
-        rows = cursor.execute(
-            """
-            SELECT signal, COUNT(signal) 
-            FROM listens 
-            WHERE user_id = ? 
-            GROUP BY signal;
-            """,
-            (username,),
-        ).fetchall()
-
-        stats_map = {row[0]: row[1] for row in rows}
-
-        lastTimeStamp = cursor.execute(
-            """
-            SELECT timestamp 
-            FROM listens 
-            WHERE user_id = ? 
-            ORDER BY timestamp DESC 
-            LIMIT 1
-            """,
-            (username,),
-        ).fetchone()
-        last_log = lastTimeStamp[0] if lastTimeStamp else "never"
-
-        total_listens = sum(stats_map.values())
-        conn.close()
-
-        return {
-            "status": "ok",
-            "totalListens": total_listens,
-            "skips": stats_map.get("skip", 0),
-            "repeat": stats_map.get("repeat", 0),
-            "complete": stats_map.get("positive", 0),
-            "partial": stats_map.get("partial", 0),
-            "lastLogged": last_log,
-        }
-    else:
-        conn.close()
-        return {"status": "failed , username required"}
 
 
 @app.get("/api/sync/stop")
@@ -1146,6 +1240,7 @@ async def connect(sid, environ, auth):
         )
 
     await sio.emit("queue_update", currentQueue(), to=sid)
+    await sio.emit("users", connected_users)
 
 
 @sio.event
