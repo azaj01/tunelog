@@ -6,8 +6,9 @@ services:
     tty: true 
     stdin_open: true
     volumes:
-      - ./data:/app/Data
+      - ./data:/app/data
       - ./logs:/app/logs
+      - ./config:/app/config
     environment:
     - PYTHONUNBUFFERED=1
     - FORCE_COLOR=1
@@ -16,6 +17,7 @@ services:
       - .env
     ports:
       - "8000:8000"
+      - "4534:4534"
 
   tunelog-frontend:
     image: ghcr.io/adiiverma40/tunelog/frontend:main
