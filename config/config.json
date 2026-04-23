@@ -49,6 +49,7 @@
   "jam": {
     "same_song_in_queue": false,
     "only_host_change_queue": false,
-    "only_host_clear_queue": true
+    "only_host_clear_queue": true,
+    "only_host_add_queue" : false
   }
 }

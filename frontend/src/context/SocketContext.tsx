@@ -3,6 +3,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { socket } from "../API/API";
@@ -15,13 +16,36 @@ export interface NowPlayingPayload {
   timestamp: number;
 }
 
+export interface ConnectedUser {
+  sid: string;
+  username: string;
+  isHost: boolean;
+  isActive: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  username: string;
+  text: string;
+  sentAt: string;
+}
+
 interface SocketContextValue {
   isConnected: boolean;
+  mySid: string | null;
   nowPlaying: NowPlayingPayload | null;
   socket: typeof socket;
   activeHost: string | null;
+  isJamActive: boolean;
+  isHost: boolean;
+  isJoining: boolean;
+  setIsHost: (value: boolean) => void;
+  setIsJoining: (value: boolean) => void;
   jamPlayback: { isPlaying: boolean } | null;
   queue: any[];
+  connectedUsers: ConnectedUser[];
+  chatMessages: ChatMessage[];
+  sendChatMessage: (text: string) => void;
 }
 
 const SocketContext = createContext<SocketContextValue | undefined>(undefined);
@@ -30,23 +54,33 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [isConnected, setIsConnected] = useState(socket.connected);
+  const [mySid, setMySid] = useState<string | null>(socket.id || null);
   const [nowPlaying, setNowPlaying] = useState<NowPlayingPayload | null>(null);
   const [activeHost, setActiveHost] = useState<string | null>(null);
   const [queue, setQueue] = useState<any[]>([]);
   const [jamPlayback, setJamPlayback] = useState<{ isPlaying: boolean } | null>(
     null,
   );
-  const onQueueUpdate = (data: any) => {
-    // console.log("queue_update:", data);
-    setQueue(data);
-  };
+  const [isHost, setIsHost] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+
+  const isJamActive = !!activeHost;
+
+  const sendChatMessage = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    socket.emit("chat_message", { text: trimmed });
+  }, []);
 
   useEffect(() => {
     if (!socket.connected) socket.connect();
 
     const onConnect = () => {
-      console.log(" Socket connected");
+      console.log("Socket connected");
       setIsConnected(true);
+      setMySid(socket.id || null);
     };
 
     const onDisconnect = () => {
@@ -54,78 +88,107 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({
       setIsConnected(false);
     };
 
-    const onNowPlaying = (data: NowPlayingPayload) => {
-      console.log("🎵 now_playing:", data);
-      setNowPlaying(data);
-    };
-
     const onJamAnnounced = (data: {
-      hostName: string;
-      trackId: string;
+      hostName: string | null;
+      trackId: string | null;
       isPlaying?: boolean;
     }) => {
-      console.log("Jam announced by:", data.hostName);
       setActiveHost(data.hostName);
-
       if (typeof data.isPlaying === "boolean") {
         setJamPlayback({ isPlaying: data.isPlaying });
       }
     };
 
     const onJamFinished = () => {
-      console.log("Jam finished");
       setActiveHost(null);
       setJamPlayback(null);
-      localStorage.removeItem("isJoining");
+      setIsHost(false);
+      setIsJoining(false);
+      setQueue([]);
+      setNowPlaying(null);
+    };
+    const onJamLeave = () => {
+      console.log("leaving jam")
+      setQueue([]);
+      setNowPlaying(null);
+      setIsJoining(false);
     };
 
-    const onJamPlay = () => {
-      console.log("jam_play");
-      setJamPlayback({ isPlaying: true });
+    const onUsers = (
+      data: Record<
+        string,
+        { username: string; isHost: boolean; isActive?: boolean }
+      >,
+    ) => {
+      const list: ConnectedUser[] = Object.entries(data).map(([sid, info]) => ({
+        sid,
+        username: info.username,
+        isHost: info.isHost,
+        isActive: info.isActive !== false,
+      }));
+      setConnectedUsers(list);
+
+      const me = list.find((u) => u.sid === socket.id);
+      if (me && me.isHost !== isHost) {
+        setIsHost(me.isHost);
+      }
     };
 
-    const onJamPause = () => {
-      console.log("jam_pause");
-      setJamPlayback({ isPlaying: false });
-    };
-
-    const onJamPlayback = (data: { isPlaying: boolean }) => {
-      console.log("⏯ jam_playback:", data.isPlaying ? "play" : "pause");
-      setJamPlayback(data);
+    const onJamHostLost = (data: { hostName: string | null }) => {
+      if (!data.hostName) return;
+      setConnectedUsers((prev) =>
+        prev.map((u) =>
+          u.username === data.hostName ? { ...u, isActive: false } : u,
+        ),
+      );
     };
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
-    socket.on("now_playing", onNowPlaying);
+    socket.on("now_playing", setNowPlaying);
     socket.on("jam_announced", onJamAnnounced);
     socket.on("jam_finished", onJamFinished);
-    socket.on("jam_play", onJamPlay);
-    socket.on("jam_pause", onJamPause);
-    socket.on("jam_playback", onJamPlayback);
-    socket.on("queue_update", onQueueUpdate);
+    socket.on("jam_playback", setJamPlayback);
+    socket.on("queue_update", setQueue);
+    socket.on("users", onUsers);
+    socket.on("jam_host_lost", onJamHostLost);
+    socket.on("leaveJam" , onJamLeave)
+    socket.on("chat_message", (msg) => setChatMessages((p) => [...p, msg]));
 
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
-      socket.off("now_playing", onNowPlaying);
+      socket.off("now_playing", setNowPlaying);
       socket.off("jam_announced", onJamAnnounced);
       socket.off("jam_finished", onJamFinished);
-      socket.off("jam_play", onJamPlay);
-      socket.off("jam_pause", onJamPause);
-      socket.off("jam_playback", onJamPlayback);
-      socket.off("queue_update", onQueueUpdate);
+      socket.off("jam_playback", setJamPlayback);
+      socket.off("queue_update", setQueue);
+      socket.off("users", onUsers);
+      socket.off("jam_host_lost", onJamHostLost);
+      socket.off("chat_message");
+
+    socket.off("leaveJam" , onJamLeave)
     };
-  }, []);
+  }, [isHost]);
 
   return (
     <SocketContext.Provider
       value={{
         isConnected,
+        mySid,
         nowPlaying,
         socket,
         activeHost,
+        isJamActive,
+        isHost,
+        isJoining,
+        setIsHost,
+        setIsJoining,
         jamPlayback,
         queue,
+        connectedUsers,
+        chatMessages,
+        sendChatMessage,
       }}
     >
       {children}

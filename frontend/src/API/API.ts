@@ -4,7 +4,10 @@ import { io , Socket } from "socket.io-client";
 
 // socket for jam  
 
-export const socket: Socket = io("http://192.168.29.118:8000", {
+export const socket: Socket = io(BASE_URL, {
+   auth: {
+    username: localStorage.getItem("tunelog_user"),
+  },
   autoConnect: true,
   transports: ["websocket"],
 });

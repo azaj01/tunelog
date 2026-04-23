@@ -50,20 +50,6 @@ class SyncState:
     fallback_stop = False
 
 
-# Notification apis to implement
-# 1. Who started playling what
-# 2. Last sycned
-# 3. last playlist generated for who
-# 4. last song that got started
-# start, stopped same -- song state
-# notification_status.starredSong.append({"username" : user_id , "song" : song['title'] , "star" : f"needs more listen, currently {totalListens}"})
-# notification_status.starredSong.append({"username" : user_id , "song" : song['title'] , "star" : final_rating})
-# notification_status.playlist.append({"username" : user_id, "size" : len(data) , "type" : "append"})
-# notification_status.playlist.append({"username" : user_id, "size" : len(data) , "type" : "regenerate"})
-# class notificationStatus:
-#     songState = []
-#     playlist = []
-#     starredSong = []
 
 _subscribers: list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = []
 
@@ -146,6 +132,7 @@ DEFAULT_CONFIG = {
         "same_song_in_queue": False,
         "only_host_change_queue": False,
         "only_host_clear_queue": True,
+        "only_host_add_queue": False,
     },
 }
 

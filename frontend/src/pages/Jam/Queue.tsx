@@ -34,6 +34,7 @@ interface Track {
   album?: string;
   duration: number;
   coverArt?: string;
+  user?: string;
 }
 
 interface Playlist {
@@ -90,6 +91,7 @@ function normalizeQueuePayload(payload: any): Track[] {
       album: item.album,
       duration: Number(item.duration ?? 0),
       coverArt: item.coverArt,
+      user: item.user ?? item.by ?? "Unknown",
     }));
   }
   if (typeof payload === "object") {
@@ -100,6 +102,7 @@ function normalizeQueuePayload(payload: any): Track[] {
       album: item?.album,
       duration: Number(item?.duration ?? 0),
       coverArt: item?.coverArt,
+      user: item?.user ?? item?.by ?? "Unknown",
     }));
   }
   return [];
@@ -121,7 +124,7 @@ function TrackCard({
     <div
       className={`flex items-center gap-2 rounded-xl px-3 py-2.5 ${
         ghost
-          ? "shadow-lg border border-brand-400 bg-white dark:bg-gray-900 opacity-95"
+          ? "border border-brand-400 bg-white opacity-95 shadow-lg dark:bg-gray-900"
           : active
             ? "bg-brand-500/10"
             : ""
@@ -152,13 +155,19 @@ function TrackCard({
       </div>
       <div className="min-w-0 flex-1">
         <p
-          className={`truncate text-sm font-medium ${active ? "text-brand-500" : "text-gray-800 dark:text-white/90"}`}
+          className={`truncate text-sm font-medium ${
+            active ? "text-brand-500" : "text-gray-800 dark:text-white/90"
+          }`}
         >
           {track.title}
         </p>
         <p className="truncate text-xs text-gray-500 dark:text-gray-400">
           {track.artist}
           {track.album ? ` · ${track.album}` : ""}
+        </p>
+        <p className="truncate text-sm dark:text-gray-400">
+          <span className="mx-1 text-green-600 font-bold ">{"-->"}</span>
+          {track.user ? `by ${track.user}` : ""}
         </p>
       </div>
       <span className="flex-shrink-0 text-xs tabular-nums text-gray-400">
@@ -241,6 +250,7 @@ function TrackRow({
         <p className="truncate text-xs text-gray-500 dark:text-gray-400">
           {track.artist}
           {track.album ? ` · ${track.album}` : ""}
+          {track.user ? ` · added by ${track.user}` : ""}
         </p>
       </div>
       <span className="flex-shrink-0 text-xs tabular-nums text-gray-400">
@@ -282,6 +292,7 @@ export default function Queue() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
+
   useEffect(() => {
     const onQueueUpdate = (payload: any) =>
       setQueue(normalizeQueuePayload(payload));
@@ -307,7 +318,7 @@ export default function Queue() {
     if (oldIndex === -1 || newIndex === -1) return;
 
     const reordered = arrayMove(queue, oldIndex, newIndex);
-    setQueue(reordered); 
+    setQueue(reordered);
 
     socket.emit(
       "reorder_queue",
@@ -317,6 +328,7 @@ export default function Queue() {
         artist: t.artist,
         coverArt: t.coverArt,
         duration: t.duration,
+        user: t.user,
       })),
     );
   }
@@ -372,6 +384,7 @@ export default function Queue() {
           album: s.album,
           duration: Number(s.duration ?? 0),
           coverArt: s.coverArt,
+          user: s.user ?? "Unknown",
         })),
       );
     } catch (err) {
@@ -387,8 +400,7 @@ export default function Queue() {
       song_id: t.id,
       title: t.title,
       artist: t.artist,
-      coverArt: t.coverArt,
-      duration: t.duration,
+      user: localStorage.getItem("tunelog_user"),
     });
   }
 
@@ -398,6 +410,7 @@ export default function Queue() {
       setIsSearching(false);
       return;
     }
+
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
@@ -414,6 +427,7 @@ export default function Queue() {
             album: s.album,
             duration: Number(s.duration ?? 0),
             coverArt: s.coverArt,
+            user: s.user ?? "Unknown",
           })),
         );
       } catch {
@@ -422,6 +436,7 @@ export default function Queue() {
         setIsSearching(false);
       }
     }, 500);
+
     return () => clearTimeout(timer);
   }, [librarySearch]);
 
@@ -490,6 +505,7 @@ export default function Queue() {
             </div>
           </div>
         </div>
+
         <div className="col-span-12 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:col-span-8">
           <div
             className={`flex flex-col rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] ${CARD_HEIGHT}`}
@@ -506,6 +522,7 @@ export default function Queue() {
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
               />
             </div>
+
             <div className="flex-1 overflow-y-auto p-2">
               {isSearching ? (
                 <div className="flex h-full items-center justify-center">
@@ -562,6 +579,7 @@ export default function Queue() {
                   </>
                 )}
               </div>
+
               {selectedPlaylist && (
                 <button
                   onClick={() => {

@@ -18,6 +18,7 @@ export interface Track {
   coverArtUrl?: string;
   streamUrl: string;
   duration?: number;
+  user?: string;
 }
 
 interface PlayerContextValue {
@@ -29,6 +30,8 @@ interface PlayerContextValue {
   isMuted: boolean;
   isOnNowPlayingPage: boolean;
   isHost: boolean;
+  isJoining: boolean;
+  inJam: boolean;
   play: (track?: Track) => void;
   pause: () => void;
   togglePlay: () => void;
@@ -54,16 +57,42 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isOnNowPlayingPage, setIsOnNowPlayingPage] = useState(false);
 
-  const { nowPlaying, jamPlayback, socket } = useGlobalSocket();
+  const { nowPlaying, jamPlayback, socket, isHost, isJoining, isJamActive } =
+    useGlobalSocket();
+
+  const inJam = isHost || isJoining;
+
   const lastSyncTime = useRef<number>(0);
   const trackRef = useRef<Track | null>(null);
   trackRef.current = track;
 
-  const isHost = localStorage.getItem("isHost") === "true";
-  const isJoining = localStorage.getItem("isJoining") === "true";
-  const inJam = isHost || isJoining;
-  console.log("in Jam : ", inJam);
   const [queue, setQueue] = useState<Track[]>([]);
+
+  const loadTrackIntoAudio = useCallback((newTrack: Track, autoPlay = true) => {
+    const audio = audioRef.current;
+
+    audio.src = newTrack.streamUrl;
+    audio.load();
+
+    setTrack(newTrack);
+    trackRef.current = newTrack;
+    setCurrentTime(0);
+    setDuration(0);
+
+    if (autoPlay) {
+      audio.play().catch(console.error);
+    }
+  }, []);
+
+  const playTrackByIndex = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= queue.length) return;
+      const nextTrack = queue[index];
+      if (!nextTrack) return;
+      loadTrackIntoAudio(nextTrack, true);
+    },
+    [queue, loadTrackIntoAudio],
+  );
 
   useEffect(() => {
     socket.emit("get_queue");
@@ -82,7 +111,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onTimeUpdate = () => {
       const current = audio.currentTime;
       setCurrentTime(current);
-      if (localStorage.getItem("isHost") === "true") {
+
+      if (isHost) {
         if (
           current - lastSyncTime.current >= 1 ||
           current < lastSyncTime.current
@@ -98,10 +128,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onEnded = () => {
       setIsPlaying(false);
       console.log("music finished");
-      const amHost = localStorage.getItem("isHost") === "true";
-      const amJoining = localStorage.getItem("isJoining") === "true";
-      if (amJoining && !amHost) return;
-      if (amHost) {
+
+      if (isJoining && !isHost) return;
+
+      if (isHost) {
         socket.emit("jam_next");
         return;
       }
@@ -111,19 +141,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const idx = currentQueue.findIndex((t) => t.id === currentId);
         const nextTrack = currentQueue[idx + 1] ?? null;
 
-        const audio = audioRef.current;
-
         if (nextTrack) {
-          audio.src = nextTrack.streamUrl;
-          audio.load();
-          setTrack(nextTrack);
-          trackRef.current = nextTrack;
-          setCurrentTime(0);
-          setDuration(0);
-          audio.play().catch(console.error);
+          loadTrackIntoAudio(nextTrack, true);
         } else {
           console.log("Queue ended → stopping player");
-
           audio.pause();
           audio.currentTime = 0;
           audio.src = "";
@@ -155,12 +176,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
     };
-  }, [socket]);
+  }, [socket, isHost, isJoining, loadTrackIntoAudio]);
 
   useEffect(() => {
     const handleRoomSync = (data: { positionMs: number }) => {
-      if (localStorage.getItem("isHost") === "true") return;
-      if (localStorage.getItem("isJoining") !== "true") return;
+      if (!isJoining || isHost) return;
 
       const hostTimeSec = data.positionMs / 1000;
       if (Math.abs(audioRef.current.currentTime - hostTimeSec) > 1.5) {
@@ -179,58 +199,73 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => {
       socket.off("sync_room_time", handleRoomSync);
     };
-  }, [socket]);
+  }, [socket, isHost, isJoining]);
 
   useEffect(() => {
     if (!jamPlayback) return;
-    if (localStorage.getItem("isHost") === "true") return;
-    if (localStorage.getItem("isJoining") !== "true") return;
+    if (!isJoining || isHost) return;
+
     if (jamPlayback.isPlaying) {
       audioRef.current.play().catch(console.error);
     } else {
       audioRef.current.pause();
     }
-  }, [jamPlayback]);
+  }, [jamPlayback, isHost, isJoining]);
 
-  const play = useCallback((newTrack?: Track) => {
-    const audio = audioRef.current;
-    if (newTrack && newTrack.id !== trackRef.current?.id) {
-      audio.src = newTrack.streamUrl;
-      audio.load();
-      setTrack(newTrack);
-      trackRef.current = newTrack;
-      setCurrentTime(0);
-      setDuration(0);
-    }
-    audio.play().catch(console.error);
-  }, []);
+  const play = useCallback(
+    (newTrack?: Track) => {
+      const audio = audioRef.current;
+
+      if (newTrack && newTrack.id !== trackRef.current?.id) {
+        loadTrackIntoAudio(newTrack, false);
+      }
+
+      audio.play().catch(console.error);
+    },
+    [loadTrackIntoAudio],
+  );
 
   const pause = useCallback(() => audioRef.current.pause(), []);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
-    const amHost = localStorage.getItem("isHost") === "true";
-    const amJoining = localStorage.getItem("isJoining") === "true";
 
-    if (amJoining && !amHost) return;
     if (audio.paused) {
       audio.play().catch(console.error);
-      if (amHost) socket.emit("jam_play");
+      if (isHost) socket.emit("jam_play");
     } else {
       audio.pause();
-      if (amHost) socket.emit("jam_pause");
+      if (isHost) socket.emit("jam_pause");
     }
-  }, [socket]);
+  }, [socket, isHost]);
 
   const next = useCallback(() => {
-    if (localStorage.getItem("isHost") !== "true") return;
-    socket.emit("jam_next");
-  }, [socket]);
+    if (inJam && !isHost) return;
+
+    if (isHost) {
+      socket.emit("jam_next");
+      return;
+    }
+
+    const currentId = trackRef.current?.id;
+    const idx = queue.findIndex((t) => t.id === currentId);
+    const nextIndex = idx >= 0 ? idx + 1 : 0;
+    playTrackByIndex(nextIndex);
+  }, [socket, isHost, inJam, queue, playTrackByIndex]);
 
   const prev = useCallback(() => {
-    if (localStorage.getItem("isHost") !== "true") return;
-    socket.emit("jam_prev");
-  }, [socket]);
+    if (inJam && !isHost) return;
+
+    if (isHost) {
+      socket.emit("jam_prev");
+      return;
+    }
+
+    const currentId = trackRef.current?.id;
+    const idx = queue.findIndex((t) => t.id === currentId);
+    const prevIndex = idx > 0 ? idx - 1 : 0;
+    playTrackByIndex(prevIndex);
+  }, [socket, isHost, inJam, queue, playTrackByIndex]);
 
   const seek = useCallback((time: number) => {
     audioRef.current.currentTime = time;
@@ -253,17 +288,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!nowPlaying) return;
 
     const isNewTrack = trackRef.current?.streamUrl !== nowPlaying.media.url;
+
     if (isNewTrack) {
-      play({
-        id: nowPlaying.timestamp.toString(),
-        title: nowPlaying.song.title,
-        artist: nowPlaying.song.artist,
-        album: nowPlaying.song.album,
-        coverArt: nowPlaying.media.albumArtUrl,
-        streamUrl: nowPlaying.media.url,
-        duration: nowPlaying.song.duration / 1000,
-      });
+      loadTrackIntoAudio(
+        {
+          id: nowPlaying.timestamp.toString(),
+          title: nowPlaying.song.title,
+          artist: nowPlaying.song.artist,
+          album: nowPlaying.song.album,
+          coverArt: nowPlaying.media.albumArtUrl,
+          streamUrl: nowPlaying.media.url,
+          duration: nowPlaying.song.duration / 1000,
+        },
+        true,
+      );
     }
+    if (!isJoining || isHost) return;
 
     const audio = audioRef.current;
     if (nowPlaying.playback.isPlaying && audio.paused) {
@@ -271,7 +311,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } else if (!nowPlaying.playback.isPlaying && !audio.paused) {
       audio.pause();
     }
-  }, [nowPlaying, play]);
+  }, [nowPlaying, loadTrackIntoAudio, isHost, isJoining]);
 
   return (
     <PlayerContext.Provider
@@ -284,6 +324,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         isMuted,
         isOnNowPlayingPage,
         isHost,
+        isJoining,
+        inJam,
         play,
         pause,
         togglePlay,

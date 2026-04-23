@@ -84,7 +84,7 @@ def pastQueue():
     return [_format_queue_item(sid) for sid in past_queue_ids]
 
 
-def AddQueue(song_id, title=None, user="Unknown"):
+def AddQueue(song_id, title=None, artist="unknown", user="Unknown"):
     try:
         if not jamConfig["same_song_in_queue"]:
             if song_id in future_queue_ids:
@@ -172,3 +172,4 @@ def sendSongPayload(id):
     }
 
     return payload
+ 

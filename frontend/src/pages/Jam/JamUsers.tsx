@@ -1,47 +1,20 @@
 import { useState, useRef, useEffect } from "react";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
+import { useGlobalSocket, ConnectedUser } from "../../context/SocketContext";
 
-interface JamUser {
-  id: string;
-  username: string;
-  displayName: string;
-  isHost: boolean;
-  isListening: boolean;
-  joinedAt: string;
-  avatarUrl: string | null;
-}
-
-interface ChatMessage {
-  id: string;
-  userId: string;
-  username: string;
-  displayName: string;
-  text: string;
-  sentAt: string;
-  avatarUrl: string | null;
-}
-
-function getStoredValue(key: string) {
+function getStoredValue(key: string): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(key) || sessionStorage.getItem(key);
 }
 
-function getCurrentUserId() {
+function getCurrentUsername(): string {
   return getStoredValue("tunelog_user") || "";
 }
 
-function getIsHost() {
-  return getStoredValue("isHost") === "true";
-}
-
-function safeParseUsers(raw: string | null): Array<{
-  username: string;
-  password: string;
-  isAdmin: boolean;
-  name: string | null;
-  avatarUrl: string | null;
-}> {
+function safeParseUsers(
+  raw: string | null,
+): Array<{ username: string; name: string | null; avatarUrl: string | null }> {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -51,96 +24,21 @@ function safeParseUsers(raw: string | null): Array<{
   }
 }
 
-function getDisplayName(username: string, fallbackName: string | null) {
-  return (
-    fallbackName ||
-    getStoredValue(`tunelog_displayname_${username}`) ||
-    username
-  );
+function resolveUserMeta(username: string): {
+  displayName: string;
+  avatarUrl: string | null;
+} {
+  const cache = safeParseUsers(localStorage.getItem("tunelog_users_cache"));
+  const match = cache.find((u) => u.username === username);
+
+  return {
+    displayName: match?.name || username,
+    avatarUrl:
+      match?.avatarUrl || getStoredValue(`tunelog_avatar_${username}`) || null,
+  };
 }
 
-function getAvatarUrl(username: string, fallbackAvatar: string | null) {
-  return fallbackAvatar || getStoredValue(`tunelog_avatar_${username}`);
-}
-
-function loadJamUsersFromStorage(): JamUser[] {
-  if (typeof window === "undefined") return [];
-
-  const cachedUsers = safeParseUsers(
-    localStorage.getItem("tunelog_users_cache"),
-  );
-  const currentUserId = getCurrentUserId();
-  const currentUserIsHost = getIsHost();
-
-  return cachedUsers.map((u, index) => ({
-    id: u.username,
-    username: u.username,
-    displayName: getDisplayName(u.username, u.name),
-    isHost: u.username === currentUserId ? currentUserIsHost : false,
-    isListening: true,
-    joinedAt: new Date(Date.now() - (index + 1) * 1000 * 60 * 12).toISOString(),
-    avatarUrl: getAvatarUrl(u.username, u.avatarUrl),
-  }));
-}
-
-const MOCK_MESSAGES: ChatMessage[] = [
-  {
-    id: "m1",
-    userId: "adii",
-    username: "adii",
-    displayName: "Adii",
-    text: "Jam started 🎵",
-    sentAt: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
-    avatarUrl: null,
-  },
-  {
-    id: "m2",
-    userId: "aditi",
-    username: "aditi",
-    displayName: "Aditi",
-    text: "yo this queue is 🔥",
-    sentAt: new Date(Date.now() - 1000 * 60 * 29).toISOString(),
-    avatarUrl: null,
-  },
-  {
-    id: "m3",
-    userId: "rajkrit",
-    username: "rajkrit",
-    displayName: "Rajkrit",
-    text: "add teeth by 5sos next",
-    sentAt: new Date(Date.now() - 1000 * 60 * 17).toISOString(),
-    avatarUrl: null,
-  },
-  {
-    id: "m4",
-    userId: "adii",
-    username: "adii",
-    displayName: "Adii",
-    text: "already in queue lol",
-    sentAt: new Date(Date.now() - 1000 * 60 * 16).toISOString(),
-    avatarUrl: null,
-  },
-  {
-    id: "m5",
-    userId: "aditi",
-    username: "aditi",
-    displayName: "Aditi",
-    text: "adii add some arijit",
-    sentAt: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
-    avatarUrl: null,
-  },
-  {
-    id: "m6",
-    userId: "rajkrit",
-    username: "rajkrit",
-    displayName: "Rajkrit",
-    text: "rait zara si is already there 😭",
-    sentAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    avatarUrl: null,
-  },
-];
-
-function getInitials(name: string) {
+function getInitials(name: string): string {
   return name
     .split(" ")
     .map((w) => w[0])
@@ -149,21 +47,14 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
-function formatRelativeTime(iso: string) {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  return `${Math.floor(diff / 3600)}h ago`;
-}
-
-function formatChatTime(iso: string) {
+function formatChatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-function getFallbackAvatarClass(seed: string) {
+function getFallbackAvatarClass(seed: string): string {
   const colors = [
     "bg-brand-500",
     "bg-pink-500",
@@ -176,12 +67,19 @@ function getFallbackAvatarClass(seed: string) {
   return colors[idx];
 }
 
+interface AvatarUser {
+  displayName: string;
+  avatarUrl: string | null;
+  isActive: boolean;
+  username: string;
+}
+
 function Avatar({
   user,
   size = "md",
   pulse = false,
 }: {
-  user: Pick<JamUser, "displayName" | "avatarUrl" | "isListening" | "username">;
+  user: AvatarUser;
   size?: "sm" | "md" | "lg";
   pulse?: boolean;
 }) {
@@ -212,18 +110,30 @@ function Avatar({
         )}
       </div>
 
-      {pulse && user.isListening && (
+      {pulse && user.isActive && (
         <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
         </span>
       )}
 
-      {pulse && !user.isListening && (
+      {pulse && !user.isActive && (
         <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-gray-300 dark:border-gray-900 dark:bg-gray-600" />
       )}
     </div>
   );
+}
+
+interface EnrichedUser extends ConnectedUser {
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+function enrichUsers(raw: ConnectedUser[]): EnrichedUser[] {
+  return raw.map((u) => {
+    const meta = resolveUserMeta(u.username);
+    return { ...u, ...meta };
+  });
 }
 
 function TransferHostModal({
@@ -231,11 +141,11 @@ function TransferHostModal({
   onTransfer,
   onClose,
 }: {
-  users: JamUser[];
-  onTransfer: (userId: string) => void;
+  users: EnrichedUser[];
+  onTransfer: (username: string) => void;
   onClose: () => void;
 }) {
-  const eligible = users.filter((u) => !u.isHost && u.isListening);
+  const eligible = users.filter((u) => !u.isHost && u.isActive);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
@@ -255,8 +165,8 @@ function TransferHostModal({
           <div className="space-y-1">
             {eligible.map((u) => (
               <button
-                key={u.id}
-                onClick={() => onTransfer(u.id)}
+                key={u.sid}
+                onClick={() => onTransfer(u.username)}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.05]"
               >
                 <Avatar user={u} size="md" pulse />
@@ -286,61 +196,36 @@ function TransferHostModal({
 const CARD_HEIGHT = "h-[700px]";
 
 export default function JamUsers() {
-  const [users, setUsers] = useState<JamUser[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES);
+  const {
+    connectedUsers,
+    chatMessages,
+    sendChatMessage,
+    socket,
+    nowPlaying,
+    isHost: isCurrentUserHost,
+  } = useGlobalSocket();
+
+  const currentUsername = getCurrentUsername();
   const [inputText, setInputText] = useState("");
   const [showTransferModal, setShowTransferModal] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const syncFromStorage = () => {
-      setCurrentUserId(getCurrentUserId());
-      setUsers(loadJamUsersFromStorage());
-    };
-
-    syncFromStorage();
-
-    const handleStorage = () => syncFromStorage();
-    window.addEventListener("storage", handleStorage);
-
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, []);
-
-  const host = users.find((u) => u.isHost);
-  const activeListeners = users.filter((u) => u.isListening);
-  const isCurrentUserHost =
-    users.find((u) => u.id === currentUserId)?.isHost ?? false;
+  const users: EnrichedUser[] = enrichUsers(connectedUsers);
+  const activeListeners = users.filter((u) => u.isActive);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [chatMessages]);
 
   function handleSendMessage() {
     const text = inputText.trim();
     if (!text) return;
-
-    const me = users.find((u) => u.id === currentUserId);
-    if (!me) return;
-
-    const newMsg: ChatMessage = {
-      id: `m${Date.now()}`,
-      userId: me.id,
-      username: me.username,
-      displayName: me.displayName,
-      text,
-      sentAt: new Date().toISOString(),
-      avatarUrl: me.avatarUrl,
-    };
-
-    setMessages((prev) => [...prev, newMsg]);
+    sendChatMessage(text);
     setInputText("");
   }
 
-  function handleTransferHost(toUserId: string) {
-    setUsers((prev) => prev.map((u) => ({ ...u, isHost: u.id === toUserId })));
+  function handleTransferHost(toUsername: string) {
+    socket.emit("transfer_host", { toUsername });
     setShowTransferModal(false);
   }
 
@@ -368,22 +253,26 @@ export default function JamUsers() {
         )}
       </div>
 
-      <div className="flex-shrink-0 border-b border-gray-100 bg-brand-500/5 px-5 py-3 dark:border-gray-800 dark:bg-brand-500/[0.07]">
-        <p className="mb-0.5 text-xs font-medium text-brand-500">Now Playing</p>
-        <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">
-          Aakhri Ishq
-        </p>
-        <p className="truncate text-xs text-gray-400">
-          Shashwat Sachdev, Jubin Nautiyal &amp; Irshad Kamil
-        </p>
-      </div>
+      {nowPlaying && (
+        <div className="flex-shrink-0 border-b border-gray-100 bg-brand-500/5 px-5 py-3 dark:border-gray-800 dark:bg-brand-500/[0.07]">
+          <p className="mb-0.5 text-xs font-medium text-brand-500">
+            Now Playing
+          </p>
+          <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">
+            {nowPlaying.song.title}
+          </p>
+          <p className="truncate text-xs text-gray-400">
+            {nowPlaying.song.artist}
+          </p>
+        </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-1">
+      <div className="flex-1 overflow-y-auto space-y-1 p-3">
         {users.map((user) => (
           <div
-            key={user.id}
+            key={user.sid}
             className={`flex items-center gap-3 rounded-xl px-3 py-3 transition-colors ${
-              user.isListening
+              user.isActive
                 ? "hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                 : "opacity-50"
             }`}
@@ -400,19 +289,22 @@ export default function JamUsers() {
                     Host
                   </span>
                 )}
-                {user.id === currentUserId && (
+                {user.username === currentUsername && (
                   <span className="flex-shrink-0 text-[10px] text-gray-400">
                     (you)
                   </span>
                 )}
+                {!user.isActive && (
+                  <span className="flex-shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-400 dark:bg-white/[0.05]">
+                    left
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-gray-400">
-                @{user.username} · joined {formatRelativeTime(user.joinedAt)}
-              </p>
+              <p className="text-xs text-gray-400">@{user.username}</p>
             </div>
 
             <div className="flex flex-shrink-0 flex-col items-end gap-1">
-              {user.isListening ? (
+              {user.isActive ? (
                 <span className="flex items-center gap-1 text-xs text-emerald-500">
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   listening
@@ -423,10 +315,10 @@ export default function JamUsers() {
 
               {isCurrentUserHost &&
                 !user.isHost &&
-                user.id !== currentUserId &&
-                user.isListening && (
+                user.username !== currentUsername &&
+                user.isActive && (
                   <button
-                    onClick={() => handleTransferHost(user.id)}
+                    onClick={() => handleTransferHost(user.username)}
                     className="text-[10px] text-gray-400 transition-colors hover:text-brand-500"
                   >
                     make host
@@ -435,6 +327,12 @@ export default function JamUsers() {
             </div>
           </div>
         ))}
+
+        {users.length === 0 && (
+          <p className="py-8 text-center text-xs text-gray-400">
+            No one in the jam yet.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -448,15 +346,17 @@ export default function JamUsers() {
           <h4 className="text-base font-semibold text-gray-800 dark:text-white/90">
             Chat
           </h4>
-          <p className="text-xs text-gray-400">{messages.length} messages</p>
+          <p className="text-xs text-gray-400">
+            {chatMessages.length} messages
+          </p>
         </div>
 
         <div className="flex -space-x-2">
           {activeListeners.slice(0, 4).map((u) => (
             <div
-              key={u.id}
+              key={u.sid}
               title={u.displayName}
-              className="h-6 w-6 rounded-full border-2 border-white text-[9px] font-bold text-white dark:border-gray-900"
+              className="h-6 w-6 rounded-full border-2 border-white dark:border-gray-900"
             >
               <Avatar user={u} size="sm" />
             </div>
@@ -464,11 +364,19 @@ export default function JamUsers() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {messages.map((msg, i) => {
-          const isMine = msg.userId === currentUserId;
-          const prevMsg = messages[i - 1];
-          const showAvatar = !prevMsg || prevMsg.userId !== msg.userId;
+      <div className="flex-1 overflow-y-auto space-y-3 px-4 py-3">
+        {chatMessages.map((msg, i) => {
+          const isMine = msg.username === currentUsername;
+          const prevMsg = chatMessages[i - 1];
+          const showAvatar = !prevMsg || prevMsg.username !== msg.username;
+
+          const senderMeta = resolveUserMeta(msg.username);
+          const avatarUser: AvatarUser = {
+            displayName: senderMeta.displayName,
+            avatarUrl: senderMeta.avatarUrl,
+            isActive: true,
+            username: msg.username,
+          };
 
           return (
             <div
@@ -477,15 +385,7 @@ export default function JamUsers() {
             >
               <div className="w-7 flex-shrink-0">
                 {showAvatar && !isMine && (
-                  <Avatar
-                    user={{
-                      displayName: msg.displayName,
-                      avatarUrl: msg.avatarUrl,
-                      isListening: true,
-                      username: msg.username,
-                    }}
-                    size="sm"
-                  />
+                  <Avatar user={avatarUser} size="sm" />
                 )}
               </div>
 
@@ -496,7 +396,7 @@ export default function JamUsers() {
               >
                 {showAvatar && !isMine && (
                   <span className="ml-1 text-[10px] text-gray-400">
-                    {msg.displayName}
+                    {senderMeta.displayName}
                   </span>
                 )}
                 <div
@@ -515,6 +415,13 @@ export default function JamUsers() {
             </div>
           );
         })}
+
+        {chatMessages.length === 0 && (
+          <p className="py-8 text-center text-xs text-gray-400">
+            No messages yet. Say something!
+          </p>
+        )}
+
         <div ref={chatEndRef} />
       </div>
 
@@ -531,7 +438,7 @@ export default function JamUsers() {
           <button
             onClick={handleSendMessage}
             disabled={!inputText.trim()}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white transition-opacity disabled:opacity-40 hover:opacity-90"
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -559,7 +466,6 @@ export default function JamUsers() {
         <div className="order-1 col-span-12 lg:order-2 lg:col-span-8">
           {ChatPanel}
         </div>
-
         <div className="order-2 col-span-12 lg:order-1 lg:col-span-4">
           {ListenersPanel}
         </div>

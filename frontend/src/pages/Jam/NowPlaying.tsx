@@ -42,30 +42,26 @@ export default function NowPlaying() {
     setIsOnNowPlayingPage,
   } = usePlayer();
 
-  const { socket, isConnected, activeHost } = useGlobalSocket();
+  const {
+    socket,
+    isConnected,
+    activeHost,
+    isJamActive,
+    isHost,
+    isJoining,
+    setIsHost,
+    setIsJoining,
+    jamPlayback,
+  } = useGlobalSocket();
+
   const [loading, setLoading] = useState(false);
-  const [isHost, setIsHost] = useState(
-    localStorage.getItem("isHost") === "true",
-  );
-  const [isJoining, setIsJoining] = useState(
-    localStorage.getItem("isJoining") === "true",
-  );
 
   useEffect(() => {
     setIsOnNowPlayingPage(true);
     return () => setIsOnNowPlayingPage(false);
   }, [setIsOnNowPlayingPage]);
 
-  useEffect(() => {
-    const syncFlags = () => {
-      setIsHost(localStorage.getItem("isHost") === "true");
-      setIsJoining(localStorage.getItem("isJoining") === "true");
-    };
-    window.addEventListener("storage", syncFlags);
-    return () => window.removeEventListener("storage", syncFlags);
-  }, []);
-
-  const canControl = isHost || (!activeHost && !isJoining);
+  const canControl = isHost || !isJamActive;
 
   useEffect(() => {
     if (!track) {
@@ -80,48 +76,51 @@ export default function NowPlaying() {
 
   useEffect(() => {
     const onPlaybackSync = (data: { isPlaying: boolean }) => {
-      if (localStorage.getItem("isJoining") !== "true") return;
-      if (localStorage.getItem("isHost") === "true") return;
+      if (!isJoining || isHost) return;
+
       const audio = (window as Window & { __audioRef?: HTMLAudioElement })
         .__audioRef;
       if (!audio) return;
-      if (data.isPlaying && audio.paused) audio.play().catch(() => {});
-      else if (!data.isPlaying && !audio.paused) audio.pause();
+
+      if (data.isPlaying && audio.paused) {
+        audio.play().catch(() => {});
+      } else if (!data.isPlaying && !audio.paused) {
+        audio.pause();
+      }
     };
+
     socket.on("jam_playback", onPlaybackSync);
     return () => {
       socket.off("jam_playback", onPlaybackSync);
     };
-  }, [socket]);
+  }, [socket, isJoining, isHost]);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   const handleStartJam = () => {
     socket.emit("start_jam", {
-      username: localStorage.getItem("tunelog_user"),
       trackId: track?.id,
     });
-    localStorage.setItem("isHost", "true");
-    localStorage.removeItem("isJoining");
     setIsHost(true);
     setIsJoining(false);
   };
 
   const handleStopJam = () => {
     socket.emit("stop_jam");
-    localStorage.removeItem("isHost");
     setIsHost(false);
+    setIsJoining(false);
   };
 
   const handleJoinJam = () => {
-    localStorage.setItem("isJoining", "true");
     setIsJoining(true);
-    socket.emit("nowPlaying", {});
+    setIsHost(false);
+    socket.emit("joinJam");
   };
 
   const handleLeaveJam = () => {
-    localStorage.removeItem("isJoining");
+    socket.emit("leave_jam")
     setIsJoining(false);
+    
   };
 
   const upNext = queue.filter((t) => t.title !== track?.title);
@@ -134,7 +133,6 @@ export default function NowPlaying() {
       />
       <PageBreadcrumb pageTitle="Now Playing" />
 
-      {/* Jam session banners */}
       <div className="space-y-3 mb-6">
         {activeHost && !isHost && (
           <div className="flex items-center justify-between rounded-2xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900/30 dark:bg-blue-500/5">
@@ -159,7 +157,7 @@ export default function NowPlaying() {
                 onClick={handleJoinJam}
                 className="rounded-lg bg-blue-500 px-4 py-2 text-xs font-bold text-white shadow-lg transition-all hover:bg-blue-600"
               >
-                Join & Sync
+                Join &amp; Sync
               </button>
             )}
           </div>
@@ -175,9 +173,12 @@ export default function NowPlaying() {
                 ? "You are the Host"
                 : isJoining
                   ? "Listening to Jam"
-                  : "Private Listening"}
+                  : activeHost
+                    ? "Jam Active"
+                    : "Private Listening"}
             </span>
           </div>
+
           {isHost ? (
             <button
               onClick={handleStopJam}
@@ -207,40 +208,40 @@ export default function NowPlaying() {
         <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-12 text-center dark:border-gray-800 dark:bg-white/[0.03]">
           <p className="text-sm text-gray-400">Nothing is playing right now</p>
           <p className="mt-1 text-xs text-gray-400">
-            Start a song in Navidrome and it'll appear here.
+            Start a song in Navidrome and it&apos;ll appear here.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-12 gap-4 md:gap-6">
-          {/* ── Player card ── */}
           <div className="col-span-12 xl:col-span-7">
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-              {/* Cover + meta inline */}
-              <div className="flex gap-5 items-start mb-6">
+              <div className="mb-6 flex items-start gap-5">
                 {track.coverArt ? (
                   <img
                     src={track.coverArt}
                     alt={track.album ?? "Cover art"}
-                    className="h-20 w-20 rounded-xl object-cover shadow-md flex-shrink-0"
+                    className="h-20 w-20 flex-shrink-0 rounded-xl object-cover shadow-md"
                   />
                 ) : (
-                  <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 flex-shrink-0">
+                  <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
                     <span className="text-3xl">🎵</span>
                   </div>
                 )}
+
                 <div className="min-w-0 flex-1 pt-0.5">
-                  <h2 className="truncate text-xl font-semibold text-gray-800 dark:text-white/90 leading-tight">
+                  <h2 className="truncate text-xl font-semibold leading-tight text-gray-800 dark:text-white/90">
                     {track.title}
                   </h2>
-                  <p className="truncate text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-gray-400">
                     {track.artist}
                   </p>
                   {track.album && (
-                    <p className="truncate text-xs text-gray-400 mt-0.5">
+                    <p className="mt-0.5 truncate text-xs text-gray-400">
                       {track.album}
                     </p>
                   )}
-                  <div className="flex items-center gap-2 mt-2">
+
+                  <div className="mt-2 flex items-center gap-2">
                     <span className="text-xs tabular-nums text-gray-400">
                       {formatTime(duration || track.duration || 0)}
                     </span>
@@ -254,12 +255,17 @@ export default function NowPlaying() {
                       <span
                         className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
                           isPlaying
-                            ? "bg-green-500 animate-pulse"
+                            ? "animate-pulse bg-green-500"
                             : "bg-gray-400"
                         }`}
                       />
                       {isPlaying ? "Playing" : "Paused"}
                     </span>
+                    {jamPlayback && (
+                      <span className="text-xs text-gray-400">
+                        Jam {jamPlayback.isPlaying ? "Playing" : "Paused"}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -277,10 +283,11 @@ export default function NowPlaying() {
                     const nextTime =
                       ((e.clientX - rect.left) / rect.width) * duration;
                     seek(nextTime);
-                    if (isHost)
+                    if (isHost) {
                       socket.emit("sync_time", {
                         positionMs: Math.floor(nextTime * 1000),
                       });
+                    }
                   }}
                 >
                   <div
@@ -370,6 +377,7 @@ export default function NowPlaying() {
                       </svg>
                     )}
                   </button>
+
                   <input
                     type="range"
                     min={0}
@@ -389,13 +397,15 @@ export default function NowPlaying() {
               )}
             </div>
           </div>
+
           <div className="col-span-12 xl:col-span-5">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] h-full">
+            <div className="h-full rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
               <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Up Next
               </p>
+
               {upNext.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                <div className="flex flex-col items-center justify-center gap-2 py-10">
                   <span className="text-3xl">🎶</span>
                   <p className="text-sm text-gray-400">Queue is empty</p>
                 </div>
@@ -409,6 +419,7 @@ export default function NowPlaying() {
                       <span className="w-4 flex-shrink-0 text-right text-xs tabular-nums text-gray-300 dark:text-gray-600">
                         {idx + 1}
                       </span>
+
                       {item.coverArtUrl ? (
                         <img
                           src={item.coverArtUrl}
@@ -420,6 +431,7 @@ export default function NowPlaying() {
                           <span className="text-sm">🎵</span>
                         </div>
                       )}
+
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-gray-800 dark:text-white/90">
                           {item.title}
@@ -427,7 +439,14 @@ export default function NowPlaying() {
                         <p className="truncate text-xs text-gray-500 dark:text-gray-400">
                           {item.artist}
                         </p>
+                        <p className="truncate text-sm dark:text-gray-400">
+                          <span className="mx-1 font-bold text-green-600">
+                            {"-->"}
+                          </span>
+                          {item.user ? `by ${item.user}` : "unknown"}
+                        </p>
                       </div>
+
                       {item.duration != null && (
                         <span className="flex-shrink-0 text-xs tabular-nums text-gray-400">
                           {formatTime(item.duration)}
