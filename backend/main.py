@@ -406,13 +406,13 @@ def main():
         if playlistConf["auto_generate_playlist"] and playlistConf[
             "last_auto_generate"
         ] != str(current_day):
-            print(
-                "current day : ",
-                current_day,
-                "playlist day : ",
-                playlistConf["last_auto_generate"],
-            )
-            print("auto playlist generate : True")
+            # print(
+            #     "current day : ",
+            #     current_day,
+            #     "playlist day : ",
+            #     playlistConf["last_auto_generate"],
+            # )
+            # print("auto playlist generate : True")
 
             if current_hour == playlistConf["auto_generate_time"]:
 

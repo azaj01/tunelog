@@ -3,12 +3,15 @@
         "playlist_size": 40,
         "wildcard_day": 60,
         "auto_generate_playlist": true,
-        "auto_generate_time": 18,
+        "auto_generate_time": 20,
         "auto_generate_when_complete": true,
         "auto_generate_completion_percent": 80,
         "auto_generate_explicit": "all",
         "auto_generate_for": [
-            
+            "adii",
+            "vedika",
+            "rajkrit",
+            "aditi"
         ],
         "auto_generate_injection": true,
         "last_auto_generate": "2026-04-23",
@@ -55,5 +58,11 @@
             "genre_map_strictness": 95,
             "duration_tolerance_pct": 10
         }
+    },
+    "jam": {
+        "same_song_in_queue": false,
+        "only_host_change_queue": false,
+        "only_host_clear_queue": true,
+        "only_host_add_queue": false
     }
 }
