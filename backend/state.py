@@ -50,7 +50,6 @@ class SyncState:
     fallback_stop = False
 
 
-
 _subscribers: list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = []
 
 
@@ -93,6 +92,14 @@ DEFAULT_CONFIG = {
     "playlist_generation": {
         "playlist_size": 40,
         "wildcard_day": 60,
+        "auto_generate_playlist": True,
+        "auto_generate_time": 4,
+        "auto_generate_when_complete": True,
+        "auto_generate_completion_percent": 80,
+        "auto_generate_explicit" : "all",
+        "auto_generate_for" : [],
+        "auto_generate_injection" : True , 
+        "last_auto_generate" : 0 , 
         "signal_weights": {"repeat": 3, "positive": 2, "partial": 0, "skip": -2},
         "slot_ratios": {
             "positive": 0.35,
@@ -141,15 +148,12 @@ config_lock = threading.Lock()
 
 def save_config(new_config_data):
     global tune_config
-    # print("in save config")
-
     with config_lock:
         try:
             with open(CONFIG_FILE_PATH, "w") as file:
                 json.dump(new_config_data, file, indent=4)
-                # print("writing new config" ,  new_config_data)
 
-            tune_config.clear()
+            # tune_config.clear()
             tune_config.update(new_config_data)
 
             console.print("[bold green]Configuration saved successfully.[/bold green]")
