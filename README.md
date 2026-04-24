@@ -27,7 +27,7 @@ In the dashboard there is a jam section, if you wish to use jam go to jam and `n
 - sync play , pause , skip
 - Queue reorder
 - Transfer host
-- Chats for joined user
+- Chats for joined user - chats are not end to end encripted, do not share personal/private info
 - Queue can be added from library or playlist
 - In `config` you can toggle some features for jam like `only host reorder queue`, `only host clear queue` and more
 

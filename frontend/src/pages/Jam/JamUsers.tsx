@@ -366,6 +366,27 @@ export default function JamUsers() {
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 px-4 py-3">
+        <div className="flex justify-center mb-6 mt-2">
+          <div className="flex max-w-[90%] md:max-w-[80%] items-center gap-2.5 rounded-lg bg-amber-100/80 px-3.5 py-2 text-center text-[11px] leading-relaxed text-amber-800 shadow-sm dark:bg-amber-500/10 dark:text-amber-200/80">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4 flex-shrink-0 opacity-80"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span>
+              The chat is not end-to-end encrypted, and anyone with a little
+              technical knowledge can access it. Do not share private info.
+            </span>
+          </div>
+        </div>
+
         {chatMessages.map((msg, i) => {
           const isMine = msg.username === currentUsername;
           const prevMsg = chatMessages[i - 1];
@@ -418,7 +439,7 @@ export default function JamUsers() {
         })}
 
         {chatMessages.length === 0 && (
-          <p className="py-8 text-center text-xs text-gray-400">
+          <p className="py-4 text-center text-xs text-gray-400">
             No messages yet. Say something!
           </p>
         )}
