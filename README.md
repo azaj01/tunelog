@@ -47,6 +47,8 @@ In the dashboard there is a jam section, if you wish to use jam go to jam and `n
 - users that have logged in the dashboard will see join jam option in nowplaying page,
 - join it and enjoy
 
+**user profile**
+User profile can be changed by `users` section
 
 ## Requirements
 
