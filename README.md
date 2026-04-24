@@ -48,7 +48,7 @@ In the dashboard there is a jam section, if you wish to use jam go to jam and `n
 - join it and enjoy
 
 **user profile**
-User profile can be changed by `users` section
+- User profile can be changed by `users` section
 
 ## Requirements
 
