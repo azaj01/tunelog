@@ -93,3 +93,7 @@ dist-ssr
 
 *.log
 *.jsonl
+
+
+#user profile pic
+config/users/

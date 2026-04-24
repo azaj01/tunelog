@@ -1,14 +1,9 @@
 # # This to give frontend api data
 
 
-# Notification apis to implement
-# 1. Who started playling what
-# 2. Last sycned
-# 3. last playlist generated for who
-# 4. last song that got started
-
-
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from pathlib import Path
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import requests
 import os
@@ -35,10 +30,10 @@ from playlist import (
     songSlots,
     signalWeights,
     API_push_playlist,
-    getDataFromDb
+    getDataFromDb,
 )
 
-from state import app_state , tune_config , save_config
+from state import app_state, tune_config, save_config
 import library
 from itunesFuzzy import useFallBackMethods
 from genre import readJson, writeJson, DeleteDataJson, autoGenre, sync_database_to_json
@@ -52,14 +47,26 @@ from dotenv import load_dotenv
 
 import asyncio
 from fastapi.responses import StreamingResponse
-from state import _subscribers, notification_status  
+from state import _subscribers, notification_status
 import json
-import re 
-
+import re
+import socketio
 
 load_dotenv()
 
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+CONFIG_DIR = "./config/users"
+
+save_dir = Path(CONFIG_DIR)
+save_dir.mkdir(parents=True, exist_ok=True)
+
 app = FastAPI()
+app.mount("/avatars", StaticFiles(directory=CONFIG_DIR), name="avatars")
+socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+
+
+SERVER_URL = os.getenv("VITE_API_URL", "http://localhost:8000")
+
 console = Console(log_path=False, log_time=False)
 
 allowedOriginsStr = os.getenv("ALLOWED_ORIGINS", "")
@@ -126,15 +133,155 @@ class csvPlaylist(BaseModel):
     username: list[str]
     song_ids: list[str]
     playlist_name: str
-    
+
+
 class configData(BaseModel):
     playlist_generation: dict
     behavioral_scoring: dict
     sync_and_automation: dict
     api_and_performance: dict
+    jam : dict
 
 
 VALID_EXPLICIT = {"explicit", "cleaned", "notExplicit"}
+
+
+@app.post("/api/user/profile/update")
+async def update_user_profile(
+    username: str = Form(...),
+    displayName: str = Form(...),
+    avatar: UploadFile = File(None),
+):
+    try:
+        save_dir = Path(CONFIG_DIR)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        avatar_db_path = None
+        full_avatar_url = None
+
+        if avatar and avatar.filename:
+            extension = Path(avatar.filename).suffix
+            filename = f"{username}{extension}"
+            target_file = save_dir / filename
+
+            with open(target_file, "wb") as buffer:
+                shutil.copyfileobj(avatar.file, buffer)
+
+            avatar_db_path = f"/avatars/{filename}"
+
+            full_avatar_url = f"{SERVER_URL.rstrip('/')}{avatar_db_path}"
+        conn = get_db_connection_usr()
+        if avatar_db_path:
+            conn.execute(
+                "UPDATE user SET name=?, avatar=? WHERE username=?",
+                (displayName, avatar_db_path, username),
+            )
+        else:
+            conn.execute(
+                "UPDATE user SET display_name=? WHERE username=?",
+                (displayName, username),
+            )
+
+            cursor = conn.execute(
+                "SELECT avatar_path FROM user WHERE username=?", (username,)
+            )
+            row = cursor.fetchone()
+            if row and row["avatar_path"]:
+                full_avatar_url = f"{SERVER_URL.rstrip('/')}{row['avatar_path']}"
+
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "success",
+            "user": {
+                "username": username,
+                "displayName": displayName,
+                "avatarUrl": full_avatar_url,
+            },
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/get-users")
+def getUsers(data: AdminAuth):
+    token = getJWT(data.admin, data.adminPD)
+    if not token:
+        return {"status": "failed", "reason": "Invalid admin credentials"}
+
+    conn = get_db_connection_usr()
+    users = conn.execute("SELECT * FROM user").fetchall()
+    conn.close()
+
+    user_list = []
+    for row in users:
+        user_dict = dict(row)
+        avatar_path = user_dict.get("avatar")
+        avatar_url = f"{SERVER_URL.rstrip('/')}{avatar_path}" if avatar_path else None
+
+        user_list.append(
+            {
+                "username": user_dict.get("username"),
+                "password": user_dict.get("password"),
+                "isAdmin": bool(user_dict.get("isAdmin")),
+                "name": user_dict.get("name"),
+                "avatarUrl": avatar_url,
+            }
+        )
+
+    return {
+        "status": "ok",
+        "users": user_list,
+    }
+
+
+@app.get("/admin/getUserData")
+def getUserData(username: str = "", password: str = ""):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if username != "" and password != "":
+        rows = cursor.execute(
+            """
+            SELECT signal, COUNT(signal) 
+            FROM listens 
+            WHERE user_id = ? 
+            GROUP BY signal;
+            """,
+            (username,),
+        ).fetchall()
+
+        stats_map = {row[0]: row[1] for row in rows}
+
+        lastTimeStamp = cursor.execute(
+            """
+            SELECT timestamp 
+            FROM listens 
+            WHERE user_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT 1
+            """,
+            (username,),
+        ).fetchone()
+        last_log = lastTimeStamp[0] if lastTimeStamp else "never"
+
+        total_listens = sum(stats_map.values())
+        conn.close()
+
+        return {
+            "status": "ok",
+            "totalListens": total_listens,
+            "skips": stats_map.get("skip", 0),
+            "repeat": stats_map.get("repeat", 0),
+            "complete": stats_map.get("positive", 0),
+            "partial": stats_map.get("partial", 0),
+            "lastLogged": last_log,
+        }
+    else:
+        conn.close()
+        return {"status": "failed , username required"}
+
 
 def GetGenre():
     conn = get_db_connection_lib()
@@ -146,8 +293,8 @@ def GetGenre():
 
     db_genres = set()
     for row in rows:
-        if row[0]: 
-            parts = [part.strip() for part in re.split(r'[,/]', row[0])]
+        if row[0]:
+            parts = [part.strip() for part in re.split(r"[,/]", row[0])]
             db_genres.update(parts)
 
     data = readJson()
@@ -157,16 +304,14 @@ def GetGenre():
         known_terms.add(category.lower())
         for v in values:
             known_terms.add(v.lower())
-            
-    unmapped_genres = [
-        g for g in db_genres 
-        if g and g.lower() not in known_terms
-    ]
+
+    unmapped_genres = [g for g in db_genres if g and g.lower() not in known_terms]
 
     return {
         "status": "success",
         "genres": sorted(unmapped_genres),
     }
+
 
 @app.get("/api/ping")
 def ping():
@@ -410,75 +555,6 @@ def createUser(data: CreateUserData):
     return {"status": "failed", "reason": "Invalid input"}
 
 
-@app.post("/admin/get-users")
-def getUsers(data: AdminAuth):
-    token = getJWT(data.admin, data.adminPD)
-    if not token:
-        return {"status": "failed", "reason": "Invalid admin credentials"}
-
-    conn = get_db_connection_usr()
-    users = conn.execute("SELECT * FROM user").fetchall()
-    conn.close()
-
-    return {
-        "status": "ok",
-        "users": [
-            {
-                "username": row["username"],
-                "password": row["password"],
-                "isAdmin": bool(row["isAdmin"]),
-            }
-            for row in users
-        ],
-    }
-
-
-@app.get("/admin/getUserData")
-def getUserData(username: str = "", password: str = ""):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    if username != "" and password != "":
-        rows = cursor.execute(
-            """
-            SELECT signal, COUNT(signal) 
-            FROM listens 
-            WHERE user_id = ? 
-            GROUP BY signal;
-            """,
-            (username,),
-        ).fetchall()
-
-        stats_map = {row[0]: row[1] for row in rows}
-
-        lastTimeStamp = cursor.execute(
-            """
-            SELECT timestamp 
-            FROM listens 
-            WHERE user_id = ? 
-            ORDER BY timestamp DESC 
-            LIMIT 1
-            """,
-            (username,),
-        ).fetchone()
-        last_log = lastTimeStamp[0] if lastTimeStamp else "never"
-
-        total_listens = sum(stats_map.values())
-        conn.close()
-
-        return {
-            "status": "ok",
-            "totalListens": total_listens,
-            "skips": stats_map.get("skip", 0),
-            "repeat": stats_map.get("repeat", 0),
-            "complete": stats_map.get("positive", 0),
-            "partial": stats_map.get("partial", 0),
-            "lastLogged": last_log,
-        }
-    else:
-        conn.close()
-        return {"status": "failed , username required"}
-
-
 @app.get("/api/sync/stop")
 def stopSync():
     library._stopSync = True
@@ -656,8 +732,8 @@ def generatePlaylist(data: PlaylistOptions):
         if data.weights:
             signalWeights(data.weights)
             # print("api signal weight " , data.weights)
-        library , history = getDataFromDb()
-        scores = score_song(username , history_dict=history , library_dict= library)
+        library, history = getDataFromDb()
+        scores = score_song(username, history_dict=history, library_dict=library)
         unheard, unheard_ratio = get_unheard_songs(scores)
         wildcards = get_wildcard_songs(scores, username)
         playlist, song_signals = build_playlist(
@@ -671,7 +747,6 @@ def generatePlaylist(data: PlaylistOptions):
             explicit_filter,
             size,
             injection,
-            
         )
         push_playlist(playlist, username, song_signals)
 
@@ -1042,9 +1117,6 @@ def csvPlaylist(data: csvPlaylist):
         return {"status": str(e)}
 
 
-
-
-
 @app.get("/notifications/stream")
 async def sse_stream():
     queue: asyncio.Queue = asyncio.Queue()
@@ -1079,24 +1151,430 @@ async def sse_stream():
         event_generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )    
+    )
+
 
 @app.get("/api/config")
 def SendConfig():
     # print("Sending config")
     return tune_config
 
+
 @app.post("/api/config/update")
 def update_config(payload: configData):
     # print(payload)
     console.print("[bold blue]Received config update request...")
-    
+    # print(payload.dict())
     success, message = save_config(payload.dict())
-    
     if not success:
         raise HTTPException(status_code=500, detail=message)
-        
     return {"status": "success", "message": "config.json updated"}
+
+
+# ====================================================================
+# JAM
+# ========================================================
+
+
+import uuid
+import asyncio
+from datetime import datetime, timezone
+from jam import (
+    sendSongPayload,
+    AddQueue,
+    currentQueue,
+    ClearQueue,
+    future_queue_ids,
+    past_queue_ids,
+)
+
+
+HOST_RECONNECT_GRACE = 20
+host_reconnect_task = None
+
+connected_users = {}
+
+jam_state = {
+    "host_sid": None,
+    "host_name": None,
+    "current_track": None,
+    "is_playing": False,
+}
+
+jamConfig = tune_config["jam"]
+
+
+async def broadcast_users():
+    await sio.emit("users", connected_users)
+
+
+async def end_jam_after_timeout():
+    await asyncio.sleep(HOST_RECONNECT_GRACE)
+
+    if jam_state["host_sid"] is None and jam_state["host_name"] is not None:
+        jam_state["host_name"] = None
+        jam_state["current_track"] = None
+        jam_state["is_playing"] = False
+        await sio.emit("jam_finished")
+        console.print("[bold red]Jam ended — host did not reconnect")
+
+
+@sio.event
+async def leave_jam(sid):
+    console.print("[bold red]Leaving jam")
+    await sio.leave_room(sid, room="jam")
+    await sio.emit("leaveJam", to=sid)
+
+
+@sio.event
+async def connect(sid, environ, auth):
+    global host_reconnect_task
+    username = (auth or {}).get("username") or "Anonymous"
+
+    console.print(f"[bold white]Client connected: {sid} ({username})")
+    connected_users[sid] = {"username": username, "isHost": False}
+
+    if (
+        jam_state["host_name"]
+        and username == jam_state["host_name"]
+        and jam_state["host_sid"] is None
+    ):
+        jam_state["host_sid"] = sid
+        connected_users[sid]["isHost"] = True
+
+        if host_reconnect_task:
+            host_reconnect_task.cancel()
+            host_reconnect_task = None
+
+        await sio.enter_room(sid, "jam")
+        console.print("[bold green]Host reconnected and jam restored")
+    await sio.emit(
+        "jam_announced",
+        {
+            "hostName": jam_state.get("host_name"),
+            "trackId": jam_state.get("current_track"),
+            "isPlaying": jam_state.get("is_playing", False),
+        },
+        to=sid,
+    )
+
+    if connected_users[sid]["isHost"]:
+        track_id = jam_state.get("current_track")
+        payload = sendSongPayload(track_id) if track_id else None
+        await sio.emit("now_playing", payload, to=sid)
+        await sio.emit("queue_update", currentQueue(), to=sid)
+    await broadcast_users()
+
+
+@sio.event
+async def disconnect(sid):
+    global host_reconnect_task
+
+    console.print(f"[bold red]Client disconnected: {sid}")
+    connected_users.pop(sid, None)
+
+    if sid == jam_state["host_sid"]:
+        jam_state["host_sid"] = None
+        jam_state["is_playing"] = False
+        await sio.emit(
+            "jam_host_lost",
+            {
+                "hostName": jam_state["host_name"],
+                "trackId": jam_state["current_track"],
+            },
+        )
+
+        if host_reconnect_task:
+            host_reconnect_task.cancel()
+
+        host_reconnect_task = asyncio.create_task(end_jam_after_timeout())
+        console.print("[bold yellow]Host disconnected — waiting for reconnect")
+    await broadcast_users()
+
+
+@sio.event
+async def start_jam(sid, data):
+    user = connected_users.get(sid)
+    if not user:
+        return
+
+    username = user["username"]
+
+    jam_state["host_sid"] = sid
+    jam_state["host_name"] = username
+    jam_state["is_playing"] = True
+    connected_users[sid]["isHost"] = True
+
+    library, history = getDataFromDb()
+    scores = score_song(
+        username,
+        history_dict=history,
+        library_dict=library,
+    )
+    unheard, unheard_ratio = get_unheard_songs(scores)
+    wildcards = get_wildcard_songs(scores, username)
+
+    playlist, song_signals = build_playlist(
+        library,
+        history,
+        scores,
+        unheard,
+        wildcards,
+        unheard_ratio,
+        username,
+        "all",
+        10,
+        False,
+    )
+
+    ClearQueue()
+    for songId in playlist:
+        AddQueue(songId, user=username)
+
+    if future_queue_ids:
+        jam_state["current_track"] = future_queue_ids.pop(0)
+    else:
+        jam_state["current_track"] = data.get("trackId")
+    await sio.emit(
+        "jam_announced",
+        {
+            "hostName": jam_state["host_name"],
+            "trackId": jam_state["current_track"],
+            "isPlaying": True,
+        },
+    )
+
+    payload = (
+        sendSongPayload(jam_state["current_track"])
+        if jam_state["current_track"]
+        else {}
+    )
+    await sio.enter_room(sid, "jam")
+    await sio.emit("now_playing", payload, room="jam")
+    await sio.emit("queue_update", currentQueue(), room="jam")
+
+    await broadcast_users()
+    console.print(f"[bold blue]Jam started by: {jam_state['host_name']}")
+
+
+@sio.event
+async def joinJam(sid):
+    console.print("[bold green]User joined the jam")
+    payload = (
+        sendSongPayload(jam_state["current_track"])
+        if jam_state["current_track"]
+        else {}
+    )
+
+    await sio.enter_room(sid, "jam")
+    await sio.emit("now_playing", payload, to=sid)
+    await sio.emit("queue_update", currentQueue(), to=sid)
+    await sio.emit("jam_playback", {"isPlaying": jam_state["is_playing"]}, to=sid)
+
+
+@sio.event
+async def get_queue(sid):
+    await sio.emit("queue_update", currentQueue(), room="jam")
+
+
+@sio.event
+async def add_queue(sid, data):
+    user = connected_users.get(sid)
+    if not user:
+        return
+    username = user["username"]
+
+    console.print(f"[bold yellow]Adding {data.get('title')} by {username} ")
+
+    if jamConfig["only_host_add_queue"] and sid != jam_state["host_sid"]:
+        console.print("[bold red]Only host can add to queue")
+        return
+
+    AddQueue(
+        song_id=data["song_id"],
+        title=data.get("title"),
+        artist=data.get("artist", "Unknown"),
+        user=username,
+    )
+    await sio.emit("queue_update", currentQueue(), room="jam")
+
+
+@sio.event
+async def reorder_queue(sid, data):
+    if jamConfig["only_host_change_queue"]:
+        if jam_state["host_sid"] != sid:
+            console.print("[bold red]Unauthorized reorder attempt")
+            return
+
+    console.print("[bold green]Reordering queue")
+    ClearQueue()
+    for item in data:
+        AddQueue(
+            item["song_id"],
+            item.get("title"),
+            item.get("artist", "Unknown"),
+            item.get("user", "unknown")
+        )
+    await sio.emit("queue_update", currentQueue(), room="jam")
+
+
+@sio.event
+async def clear_queue(sid):
+    if jamConfig["only_host_clear_queue"]:
+        if jam_state["host_sid"] != sid:
+            console.print("[bold red]Unauthorized Clear attempt")
+            return
+
+    console.print("[bold yellow]Clearing Queue")
+    ClearQueue()
+    jam_state["current_track"] = None
+    jam_state["is_playing"] = False
+    await sio.emit("now_playing", None, room="jam")
+    await sio.emit("queue_update", currentQueue(), room="jam")
+
+
+@sio.event
+async def stop_jam(sid):
+    if sid != jam_state["host_sid"]:
+        return
+
+    jam_state["host_sid"] = None
+    jam_state["host_name"] = None
+    jam_state["current_track"] = None
+    jam_state["is_playing"] = False
+
+    connected_users[sid]["isHost"] = False
+    await sio.emit("jam_finished")
+    await sio.emit("now_playing", None, room="jam")
+    await sio.emit("queue_update", [], room="jam")
+
+    await sio.close_room("jam")
+    
+    await broadcast_users()
+    console.print("[bold yellow]Jam stopped by host")
+
+
+@sio.event
+async def jam_play(sid):
+    if sid != jam_state["host_sid"]:
+        return
+    jam_state["is_playing"] = True
+    await sio.emit("jam_playback", {"isPlaying": True}, room="jam")
+
+
+@sio.event
+async def jam_pause(sid):
+    if sid != jam_state["host_sid"]:
+        return
+    jam_state["is_playing"] = False
+    await sio.emit("jam_playback", {"isPlaying": False}, room="jam")
+
+
+@sio.event
+async def jam_next(sid):
+    if sid != jam_state["host_sid"]:
+        return
+
+    if jam_state["current_track"]:
+        past_queue_ids.append(jam_state["current_track"])
+
+    if future_queue_ids:
+        next_track_id = future_queue_ids.pop(0)
+        jam_state["current_track"] = next_track_id
+        jam_state["is_playing"] = True
+        payload = sendSongPayload(next_track_id)
+    else:
+        jam_state["current_track"] = None
+        jam_state["is_playing"] = False
+        payload = None
+
+    await sio.emit("now_playing", payload, room="jam")
+    await sio.emit("jam_playback", {"isPlaying": jam_state["is_playing"]}, room="jam")
+    await sio.emit("queue_update", currentQueue(), room="jam")
+
+
+@sio.event
+async def jam_prev(sid):
+    if sid != jam_state["host_sid"]:
+        return
+
+    if not past_queue_ids:
+        return
+    if jam_state["current_track"]:
+        future_queue_ids.insert(0, jam_state["current_track"])
+    prev_track_id = past_queue_ids.pop()
+    jam_state["current_track"] = prev_track_id
+    jam_state["is_playing"] = True
+
+    payload = sendSongPayload(prev_track_id)
+
+    await sio.emit("now_playing", payload, room="jam")
+    await sio.emit("jam_playback", {"isPlaying": jam_state["is_playing"]}, room="jam")
+    await sio.emit("queue_update", currentQueue(), room="jam")
+
+
+@sio.event
+async def sync_time(sid, data):
+    if sid != jam_state["host_sid"]:
+        return
+    await sio.emit("sync_room_time", {"positionMs": data.get("positionMs")}, room="jam")
+
+
+@sio.event
+async def chat_message(sid, data):
+    if sid not in connected_users:
+        return
+
+    username = connected_users[sid]["username"]
+    text = (data.get("text") or "").strip()
+    if not text:
+        return
+
+    msg = {
+        "id": str(uuid.uuid4()),
+        "username": username,
+        "text": text,
+        "sentAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await sio.emit("chat_message", msg, room="jam")
+
+
+@sio.event
+async def transfer_host(sid, data):
+    if sid != jam_state["host_sid"]:
+        console.print("[bold red]Unauthorized transfer_host attempt")
+        return
+
+    to_username = data.get("toUsername")
+    if not to_username:
+        return
+
+    target_sid = next(
+        (s for s, u in connected_users.items() if u["username"] == to_username), None
+    )
+
+    if target_sid is None:
+        console.print(f"[bold red]transfer_host: {to_username} not connected")
+        return
+
+    connected_users[sid]["isHost"] = False
+    jam_state["host_sid"] = target_sid
+    jam_state["host_name"] = to_username
+    connected_users[target_sid]["isHost"] = True
+
+    await sio.enter_room(target_sid, "jam")
+    await sio.emit(
+        "jam_announced",
+        {
+            "hostName": to_username,
+            "trackId": jam_state.get("current_track"),
+            "isPlaying": jam_state.get("is_playing", False),
+        },
+    )
+
+    await broadcast_users()
+
 
 if __name__ == "__main__":
     init_db()

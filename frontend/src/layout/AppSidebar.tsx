@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 
@@ -7,9 +6,9 @@ import {
   GridIcon,
   HorizontaLDots,
   UserCircleIcon,
-  
   PageIcon,
   AudioIcon,
+  ListIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 
@@ -21,9 +20,18 @@ type NavItem = {
 };
 
 const TweakIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="3"/>
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
   </svg>
 );
 
@@ -38,12 +46,13 @@ const navItems: NavItem[] = [
     name: "Users",
     path: "/user",
   },
-  
+
   {
     icon: <AudioIcon />,
     name: "Playlist",
     path: "/playlist",
   },
+
   {
     icon: <PageIcon />,
     name: "Library",
@@ -52,6 +61,16 @@ const navItems: NavItem[] = [
       { name: "Import", path: "/import" },
     ],
   },
+  {
+    icon: <ListIcon/>,
+    name: "Jam",
+    subItems: [
+      { name: "Now Playing", path: "/nowplaying" },
+      { name: "Queues", path: "/queue" },
+      { name: "Users", path: "/jamuser" },
+    ],
+  },
+
   {
     icon: <TweakIcon />,
     name: "Tweaks",
@@ -72,7 +91,9 @@ const AppSidebar: React.FC = () => {
     type: "main" | "others";
     index: number;
   } | null>(null);
-  const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>({});
+  const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
+    {},
+  );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const isActive = useCallback(
@@ -119,7 +140,9 @@ const AppSidebar: React.FC = () => {
                   ? "menu-item-active"
                   : "menu-item-inactive"
               } cursor-pointer ${
-                !isExpanded && !isHovered ? "lg:justify-center" : "lg:justify-start"
+                !isExpanded && !isHovered
+                  ? "lg:justify-center"
+                  : "lg:justify-start"
               }`}
             >
               <span
@@ -137,7 +160,8 @@ const AppSidebar: React.FC = () => {
               {(isExpanded || isHovered || isMobileOpen) && (
                 <ChevronDownIcon
                   className={`ml-auto w-5 h-5 transition-transform duration-200 ${
-                    openSubmenu?.type === menuType && openSubmenu?.index === index
+                    openSubmenu?.type === menuType &&
+                    openSubmenu?.index === index
                       ? "rotate-180 text-brand-500"
                       : ""
                   }`}
@@ -194,12 +218,16 @@ const AppSidebar: React.FC = () => {
                       {subItem.name}
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
-                          <span className={`ml-auto ${isActive(subItem.path) ? "menu-dropdown-badge-active" : "menu-dropdown-badge-inactive"} menu-dropdown-badge`}>
+                          <span
+                            className={`ml-auto ${isActive(subItem.path) ? "menu-dropdown-badge-active" : "menu-dropdown-badge-inactive"} menu-dropdown-badge`}
+                          >
                             new
                           </span>
                         )}
                         {subItem.pro && (
-                          <span className={`ml-auto ${isActive(subItem.path) ? "menu-dropdown-badge-active" : "menu-dropdown-badge-inactive"} menu-dropdown-badge`}>
+                          <span
+                            className={`ml-auto ${isActive(subItem.path) ? "menu-dropdown-badge-active" : "menu-dropdown-badge-inactive"} menu-dropdown-badge`}
+                          >
                             pro
                           </span>
                         )}
@@ -224,15 +252,29 @@ const AppSidebar: React.FC = () => {
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`py-8 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
+      <div
+        className={`py-8 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}
+      >
         <Link to="/">
           {isExpanded || isHovered || isMobileOpen ? (
             <div className="flex items-center gap-2">
-              <img src="/images/logo/tune.svg" alt="Logo" width={60} height={40} />
-              <span className="text-black dark:text-white text-2xl font-medium">TuneLog</span>
+              <img
+                src="/images/logo/tune.svg"
+                alt="Logo"
+                width={60}
+                height={40}
+              />
+              <span className="text-black dark:text-white text-2xl font-medium">
+                TuneLog
+              </span>
             </div>
           ) : (
-            <img src="/images/logo/tune.svg" alt="Logo" width={32} height={32} />
+            <img
+              src="/images/logo/tune.svg"
+              alt="Logo"
+              width={32}
+              height={32}
+            />
           )}
         </Link>
       </div>
@@ -240,8 +282,14 @@ const AppSidebar: React.FC = () => {
         <nav className="mb-6">
           <div className="flex flex-col gap-4">
             <div>
-              <h2 className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
-                {isExpanded || isHovered || isMobileOpen ? "Menu" : <HorizontaLDots className="size-6" />}
+              <h2
+                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}
+              >
+                {isExpanded || isHovered || isMobileOpen ? (
+                  "Menu"
+                ) : (
+                  <HorizontaLDots className="size-6" />
+                )}
               </h2>
               {renderMenuItems(navItems, "main")}
             </div>

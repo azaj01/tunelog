@@ -1,5 +1,44 @@
 const BASE_URL = import.meta.env.VITE_API_URL;
 
+import { io , Socket } from "socket.io-client";
+
+// socket for jam  
+
+export const socket: Socket = io(BASE_URL, {
+   auth: {
+    username: localStorage.getItem("tunelog_user"),
+  },
+  autoConnect: true,
+  transports: ["websocket"],
+});
+
+export function connectSocket(token: string) {
+  socket.auth = { token };
+  if (!socket.connected) socket.connect();
+}
+
+export function disconnectSocket() {
+  if (socket.connected) socket.disconnect();
+}
+
+
+
+export interface UpdateProfileRequest {
+  username: string;
+  displayName: string;
+  avatar?: File | null; 
+}
+
+export interface UpdateProfileResponse {
+  status: string;
+  message: string;
+  user?: {
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+  };
+}
+
 export interface Stats {
   total_songs: number;
   total_listens: number;
@@ -88,6 +127,8 @@ export interface User {
   username: string;
   password: string;
   isAdmin: boolean;
+  name : string;
+  avatarUrl : string | null; 
 }
 
 export interface GetUsersResponse {
@@ -322,11 +363,18 @@ export interface ApiAndPerformanceConfig {
   };
 }
 
+
 export interface TuneConfig {
   playlist_generation: PlaylistGenerationConfig;
   behavioral_scoring: BehavioralScoringConfig;
   sync_and_automation: SyncAndAutomationConfig;
   api_and_performance: ApiAndPerformanceConfig;
+  jam?: {
+  same_song_in_queue: boolean;
+  only_host_change_queue: boolean;
+  only_host_clear_queue: boolean;
+  only_host_add_queue: boolean;
+};
 }
 
 export interface UpdateConfigResponse {
@@ -694,4 +742,27 @@ export async function fetchUpdateConfig(
   });
   if (!res.ok) throw new Error("Failed to update configuration");
   return res.json();
+}
+
+
+
+export async function fetchUpdateProfile(
+  data: UpdateProfileRequest
+): Promise<UpdateProfileResponse> {
+  const formData = new FormData();
+  formData.append("username", data.username);
+  formData.append("displayName", data.displayName);
+  if (data.avatar) {
+    formData.append("avatar", data.avatar);
+  }
+  const response = await fetch(`${BASE_URL}/api/user/profile/update`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update profile: ${response.statusText}`);
+  }
+  const result: UpdateProfileResponse = await response.json();
+  return result;
 }

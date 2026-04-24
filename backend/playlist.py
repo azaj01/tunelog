@@ -129,10 +129,10 @@ from db import (
     get_db_connection_playlist,
 )
 from config import build_url, build_url_for_user, getAllUser
-from state import notification_status
+from state import notification_status , tune_config
 
 console = Console(log_path=False, log_time=False)
-from state import tune_config
+# from state import tune_config
 
 PLAYLIST_SIZE = tune_config["playlist_generation"]["playlist_size"]
 WILDCARD_DAY = tune_config["playlist_generation"]["wildcard_day"]

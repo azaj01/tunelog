@@ -302,14 +302,14 @@ def main():
         try:
             uvicornThread = threading.Thread(
                 target=uvicorn.run,
-                args=("api:app",),
+                args=("api:socket_app",),
                 kwargs={"host": "0.0.0.0", "port": 8000, "log_level": "warning"},
                 daemon=True,
             )
             ProxyThread = threading.Thread(
                 target=uvicorn.run,
                 args=("proxy.proxy:app",),
-                kwargs={"host": "0.0.0.0", "port": proxyPort, "log_level": "debug"},
+                kwargs={"host": "0.0.0.0", "port": proxyPort, "log_level": "warning"},
                 daemon=True,
             )
             uvicornThread.start()
@@ -324,7 +324,7 @@ def main():
                 )
                 sys.exit(1)
             else:
-                status_registry.update("uvicorn", status="running")
+                status_registry.update("uvicorn", status="running" )
                 console.print(
                     f"[bold green]API Started & Verified on Port {proxyPort}[/bold green]"
                 )
@@ -406,13 +406,13 @@ def main():
         if playlistConf["auto_generate_playlist"] and playlistConf[
             "last_auto_generate"
         ] != str(current_day):
-            print(
-                "current day : ",
-                current_day,
-                "playlist day : ",
-                playlistConf["last_auto_generate"],
-            )
-            print("auto playlist generate : True")
+            # print(
+            #     "current day : ",
+            #     current_day,
+            #     "playlist day : ",
+            #     playlistConf["last_auto_generate"],
+            # )
+            # print("auto playlist generate : True")
 
             if current_hour == playlistConf["auto_generate_time"]:
 

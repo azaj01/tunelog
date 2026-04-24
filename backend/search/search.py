@@ -242,3 +242,81 @@ async def searchTable(request, query, end=15, start=0, type: str = "global"):
 
     finally:
         conn.close()
+        
+        
+        
+# async def search_global_with_search3(request, query, nav_url, username, password, end=15, start=0):
+#     import httpx
+#     import asyncio
+
+#     history = fetchAllFromListens()
+
+#     conn = get_db_connection_lib()
+#     cursor = conn.cursor()
+
+#     cleaned_query = normalize_text(query)
+#     if not cleaned_query:
+#         return []
+
+#     safe_query = f"{cleaned_query}*"
+
+#     try:
+#         # ── 1. FTS5 search (local ranking) ───────────────────────────────
+#         raw = fts_song_search(cursor, safe_query)
+#         ranked = _rank_songs(raw, history)
+
+#         paginated_ids = [s["id"] for s in ranked[start:end]]
+
+#         # ── 2. Fetch local enriched results (your existing system) ───────
+#         local_results = []
+#         if paginated_ids:
+#             local_results = await fetchAll(
+#                 request,
+#                 paginated_ids,
+#                 is_subsonic=True,
+#                 type="global"
+#             )
+
+#         # ── 3. Navidrome search3 API ─────────────────────────────────────
+#         async with httpx.AsyncClient() as client:
+#             params = {
+#                 "query": cleaned_query,
+#                 "songCount": end,
+#                 "songOffset": start,
+#                 "u": username,
+#                 "p": password,
+#                 "v": "1.16.1",
+#                 "c": "tunelog",
+#                 "f": "json"
+#             }
+
+#             url = f"{nav_url}/rest/search3"
+#             res = await client.get(url, params=params)
+
+#         nav_results = []
+#         if res.status_code == 200:
+#             data = res.json()
+#             songs = (
+#                 data.get("subsonic-response", {})
+#                     .get("searchResult3", {})
+#                     .get("song", [])
+#             )
+
+#             for s in songs:
+#                 s["comment"] = "BY TUNELOG PROXY - NAVIDROME SEARCH3"
+#                 nav_results.append(s)
+
+#         # ── 4. Merge results (dedupe by id) ──────────────────────────────
+#         seen = set()
+#         merged = []
+
+#         for item in local_results + nav_results:
+#             sid = item.get("id")
+#             if sid and sid not in seen:
+#                 seen.add(sid)
+#                 merged.append(item)
+
+#         return merged
+
+#     finally:
+#         conn.close()

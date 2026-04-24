@@ -7,6 +7,7 @@ import MostPlaysbyUser from "../../components/dashboardItems/MostPlaysbyUser";
 import MostHeardArtist from "../../components/dashboardItems/MostHeardArtist";
 import PageMeta from "../../components/common/PageMeta";
 import { fetchLogin, fetchStats, Stats, fetchGetUsers } from "../../API/API";
+import MiniPlayer from "../Jam/MiniPlayer";
 
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -69,6 +70,7 @@ export default function Home() {
           <MostPlaysbyUser />
         </div>
       </div>
+      <MiniPlayer/>
     </>
   );
 }

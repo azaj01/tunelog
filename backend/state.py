@@ -135,6 +135,12 @@ DEFAULT_CONFIG = {
             "duration_tolerance_pct": 10,
         },
     },
+    "jam": {
+        "same_song_in_queue": False,
+        "only_host_change_queue": False,
+        "only_host_clear_queue": True,
+        "only_host_add_queue": False,
+    },
 }
 
 config_lock = threading.Lock()
@@ -149,7 +155,7 @@ def save_config(new_config_data):
 
             # tune_config.clear()
             tune_config.update(new_config_data)
-
+            
             console.print("[bold green]Configuration saved successfully.[/bold green]")
             return True, "Success"
 

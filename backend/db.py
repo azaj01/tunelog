@@ -6,6 +6,9 @@ import sqlite3
 import os
 import time
 import functools
+from rich.console import Console
+
+console = Console()
 
 
 # import sqlite3
@@ -70,6 +73,8 @@ def init_db_usr():
         """
         CREATE TABLE IF NOT EXISTS user (
             username     TEXT PRIMARY KEY,
+            name    Text,
+            avatar Text,
             password       TEXT,
             isAdmin     BOOLEAN,
             playlistId  TEXT
@@ -77,7 +82,14 @@ def init_db_usr():
         )
     """
     )
-
+    try :
+        console.print("[bold green]Trying to create name column")
+        cursor.execute("ALTER TABLE user ADD COLUMN name TEXT")
+        console.print("[bold green]Trying to create Avatar column")
+        cursor.execute("ALTER TABLE user ADD COLUMN avatar TEXT")
+    except Exception as e :
+        console.print("[bold Red]COLUMN MAY ALREADY EXIST" , e)
+        # cursor.execute("ALTER TABLE user ADD COLUMN name TEXT")
     conn.commit()
     conn.close()
 
@@ -195,6 +207,7 @@ def db_supervisor(func):
         return None
 
     return wrapper
+
 
 def init_search_db():
     conn = get_db_connection_lib()
